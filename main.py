@@ -1,7 +1,4 @@
-def a(x):
-    if x % 2 == 0:
-        return True
-    else:
-        return False
+import numpy as np
+#import matplotlib.pyplot as plt
+import torch
 
-print(a(2))
