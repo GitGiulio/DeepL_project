@@ -3,12 +3,15 @@ import numpy as np
 import sklearn
 import os
 
-def filter_lines_by_matches(filename, list_of_players):
-    with open(filename, 'r') as infile:
-        lines = infile.readlines()
+# outfile_path = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\output_otb.txt"
+outfile_path = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\output.txt"
 
-    outfile_path = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\output.txt"
-    outfile = open(outfile_path, 'w')
+outfile = open(outfile_path, 'a')
+
+
+def filter_lines_by_matches(filename, list_of_players):
+    with open(filename, 'r', encoding="utf-8") as infile:
+        lines = infile.readlines()
 
     keep = False
     for index,line in enumerate(lines):
@@ -20,7 +23,7 @@ def filter_lines_by_matches(filename, list_of_players):
                     outfile.write(line)
                 elif (line[0:7] == "[Black " or line[0:7] == "[White " or line[0:8] == "[Result " or
                         line[0:10] == "[WhiteElo " or line[0:10] == "[BlackElo " or line[0:7] == "[TimeC " or
-                        line[0] != "["):
+                        line[0] != "["): # TODO actually non va bene perche le line delle mosse possono anche iniziare per [ se ti va di sfiga
                     outfile.write(line)
                 else:
                     continue
@@ -34,9 +37,12 @@ def filter_lines_by_matches(filename, list_of_players):
                 else:
                     continue
 
-    outfile.close()
-
-path = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\LumbrasGigaBase_Online_2024.pgn"
+path_online = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\LumbrasGigaBase_Online_2024.pgn"
+path_otb1 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\LumbrasGigaBase_OTB_2000_2004.pgn"
+path_otb2 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\LumbrasGigaBase_OTB_2005_2009.pgn"
+path_otb3 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\LumbrasGigaBase_OTB_2010_2014.pgn"
+path_otb4 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\LumbrasGigaBase_OTB_2015_2019.pgn"
+path_otb5 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\LumbrasGigaBase_OTB_2020_2024.pgn"
 
 LIST_OF_PLAYERS = ["\"Carlsen, Magnus\"",
                    "\"Cramling Bellon, Anna\"",
@@ -44,6 +50,20 @@ LIST_OF_PLAYERS = ["\"Carlsen, Magnus\"",
                    "\"Nepomniachtchi, Ian\"",
                    "\"Firouzja, Alireza\"",
                    "\"Giri, Anish\"",
-                   "\"Niemann, Hans\""]
+                   "\"Niemann, Hans\"",
+                   "\"Cramling, Pia\"",
+                   "\"Nakamura, Hikaru\"",
+                   "\"Botez, Alexandra\"",
+                   "\"Botez, Andrea\"",
+                   "\"Belenkaya, Dina\"",
+                   "\"So, Wesley\"",]
 
-filter_lines_by_matches(path, LIST_OF_PLAYERS)
+filter_lines_by_matches(path_online, LIST_OF_PLAYERS)
+filter_lines_by_matches(path_otb1, LIST_OF_PLAYERS)
+filter_lines_by_matches(path_otb2, LIST_OF_PLAYERS)
+filter_lines_by_matches(path_otb3, LIST_OF_PLAYERS)
+filter_lines_by_matches(path_otb4, LIST_OF_PLAYERS)
+filter_lines_by_matches(path_otb5, LIST_OF_PLAYERS)
+
+outfile.close()
+
