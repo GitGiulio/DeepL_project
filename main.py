@@ -19,7 +19,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 
 model = nn.Sequential(
-    nn.Linear(20, 30),
+    nn.Conv(20, 30),
     nn.ReLU(),
     nn.Linear(30, 4),
     nn.Softmax(1),
