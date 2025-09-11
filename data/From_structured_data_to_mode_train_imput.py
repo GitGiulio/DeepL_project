@@ -14,33 +14,66 @@ def filter_lines_by_matches(filepath, list_of_players):
     """
     Col 1(input): "(W/B) n*(n*(x. move|(move move)) n*($y)) (result)",
     Col 2(true_value): "Player name (class_number)"
+
+    --I can also add additional columns with other data like--
+    Col 3(PlayerElo): "elo" <- giving those to the model would be kinda cheating
+    Col 4(Opponent): "Player name"
+    Col 5(OpponentElo): "elo" <- giving those to the model would be kinda cheatingù
+
+    Col 7(NumberOfMoves): "number of moves" <-- this may be useful for feeding the model in the proper way
+
+    Col 6(TimeControl): "time control" <--- could be a good idea to also give this to the model as input
     """
     with open(filepath, 'r', encoding="utf-8") as infile:
         lines = infile.readlines()
 
-    keep = False
+    dataframe = pd.DataFrame()
+
+    dataframe["input"] = ""
+    dataframe["TrueValue"] = ""
+    dataframe["PlayerElo"] = 0
+    dataframe["Opponent"] = ""
+    dataframe["OpponentElo"] = 0
+    dataframe["NumberOfMoves"] = 0
+    dataframe["TimeControl"] = ""
+
+    game_number = 0
     for index,line in enumerate(lines):
-        if keep:
-            if line[0:7] == "[White ":
-                keep = False
+        for player_name in list_of_players:
+            if player_name in line:
+                input_string = ""
+                if line[0:7] == "[Black ":
+                    input_string = input_string + "B"
+                    if player_name[1:-1] == lines[index][8:-3]:
+                        print("CheckBlack")
+                    dataframe.loc[game_number, "TrueValue"] = player_name[1:-1]
+                    dataframe[game_number,"Opponent"] = lines[index-1][8:-3]
+                    dataframe[game_number,"PlayerElo"] = int( lines[index+3][11:-3] )
+                    dataframe[game_number,"OpponentElo"] = int( lines[index+2][11:-3] )
+                    #dataframe[game_number,"TimeControl"] = lines[index+4][x:-3]
+
+                elif line[0:7] == "[White ":
+                    input_string = input_string + "W"
+                    if player_name[1:-1] == lines[index][8:-3]:
+                        print("CheckWhite")
+
+                    dataframe.loc[game_number, "TrueValue"] = player_name[1:-1]
+                    dataframe[game_number,"Opponent"] = lines[index + 1][8:-3]
+                    dataframe[game_number,"PlayerElo"] = int(lines[index + 3][11:-3])
+                    dataframe[game_number,"OpponentElo"] = int(lines[index + 4][11:-3])
+                    # dataframe[game_number,"TimeControl"] = lines[index+5][x:-3]
+                else:
+                    print("ERROR")
+                while False:
+                    # TODO parsare le mosse per scriverle tutte unite senza cose aggiuntive
+                    # TODO forse posso eliminare i commenti qui se non li voglio
+                    pass
+                dataframe.loc[game_number, "input"] = input_string
+                game_number = game_number + 1
             else:
-                if "[TimeControl" in line:  # I have literally no fukking clue of why this does not work
-                    outfile.write(line)
-                elif (line[0:7] == "[Black " or line[0:7] == "[White " or line[0:8] == "[Result " or
-                        line[0:10] == "[WhiteElo " or line[0:10] == "[BlackElo " or line[0:7] == "[TimeC " or
-                        line[0] != "["): # TODO actually non va bene perche le line delle mosse possono anche iniziare per [ se ti va di sfiga
-                    outfile.write(line)
-                else:
-                    continue
-        if not keep:  # not else because I am changing keep in the if
-            for player_name in list_of_players:
-                if player_name in line:
-                    if line[0:7] == "[Black ":
-                        outfile.write(lines[index-1])
-                    outfile.write(line)
-                    keep = True
-                else:
-                    continue
+                continue
+
+    return dataframe
 
 outfile_path = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\output.txt"
 
