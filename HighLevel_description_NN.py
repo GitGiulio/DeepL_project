@@ -24,7 +24,7 @@ So the general stucture is "(W/B) n*(n*(x. move|(move move)) n*($y)) (result)" w
 
 ------------------------------------------------------------------------------------------------------------------------
 
-How to use the data??
+How to use the data?? Maby just transformers + attention + maby somthing else
 
 I think a RNN (recurrent neural net) is the best way since we have a undefinetly long series of moves (BUT I'm not sure)
 
