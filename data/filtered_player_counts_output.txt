@@ -1,0 +1,363 @@
+Flamerare                           67339 bot
+RaspFish                            53586 bot
+YoBot_v2                            38073 bot
+Nadigraj                            35821 bot
+ToromBot                            34563 bot
+ArasanX                             27163 unknown_real
+Nikitosikbot                        26215 bot
+MassterofMayhem                     26068 IM
+JelenaZ                             24452 unknown_real
+ResoluteBot                         24064 bot
+lestri                              23458 GM
+caissa-x                            23122 bot
+Nikitosik-ai                        22773 bot
+ReinforcementTrial                  22689 bot
+doreality                           22064 FIDE
+therealYardbird                     21907 unknown_real
+Chesssknock                         21441 unknown_real
+No_signs_of_V                       21049 unknown_real
+FireFishBOT_v2                      20604 bot
+Recobachess                         20159 unknown_real
+Intron014                           19750 bot
+expositor                           19316 bot
+drawingchest                        18608 FM
+kasparik_garik                      18304 IM
+ChainsOfFantasia                    17710 IM
+Alexandr_KhleBovich                 17447 IM
+unknown-maestro_2450                17080 IM
+gefuehlter_FM                       16913 unknown_real
+gmmitkov                            16087 GM
+positionaloldman                    15924 unknown_real
+Consent_to_treatment                15588 unknown_real
+Gyalog75                            15574 FM
+chargemax23                         14889 IM
+Boreminator                         14830 unknown_real
+sotirakis                           14688 FIDE
+cn_ua                               14640 IM
+anhao                               14585 NM
+RussianBlizzard                     14584 bot
+blundar_bot                         14575 bot
+Chess-Network                       14485 bot
+manuel-abarca                       14036 FIDE
+Chess_diviner                       13992 IM
+Toro123                             13685 IM
+Odirovski                           13356 IM
+manneredmonkey                      13303 NM
+Viktor_Solovyov                     13248 FIDE
+Stas-2444                           13154 unknown_real
+Zhigalko, Sergei                    13086 GM
+AKS-Mantissa                        13060 bot
+vistagausta                         12934 unknown_real
+Romsta                              12835 IM
+Aborigen100500                      12780 NM
+JoeAssaad                           12632 CM
+bodoque50                           12460 FM
+doreality1991                       12306 unknown_real
+Niper13                             12203 unknown_real
+Weiawaga                            12147 bot
+Violet_Pride                        11931 unknown_real
+Ivanoblitz                          11906 unknown_real
+Atalik, Suat                        11881 GM
+iakov98                             11834 IM
+AlexD64                             11823 FM
+satlan                              11709 unknown_real
+Bakayoyo                            11636 GM
+athena-pallada                      11494 GM
+jgeg                                11453 bot
+BitByByte                           11338 bot
+Pblu35                              11245 unknown_real
+Lynx_BOT                            11173 bot
+okriak                              11151 IM
+morus22                             11041 unknown_real
+Corre_por_tu_vida                   11009 IM
+Attila76                            10931 FM
+Karlos_ulsk                         10917 FM
+www68                               10650 IM
+Podrebo                             10499 FM
+papasi                              10323 IM
+crackcubano                         10194 GM
+Scarlet_dawn                        10193 bot
+Chessibague                         10052 IM
+Konstrictor                          9945
+EleKtRoMaGnIt                        9941
+snayperchess                         9910
+ZhohoFF                              9852
+dont_blunder                         9826
+Mate-AI                              9749
+Ute-Manfred                          9689
+Konkurs_prognozov                    9674
+Mischuk_D                            9621
+kenkons                              9615
+notkevich                            9575
+Elda64                               9570
+PetersBot                            9549
+Konnov, Oleg                         9503
+pawn_git                             9495
+DrawDenied_Twitch                    9453
+Vnebo                                9436
+Leviathan64                          9377
+Mavi_Alpha                           9364
+VonSinnen                            9258
+Nakamura, Hikaru                     9241
+SpiderMoves                          9191
+econpower                            9137
+Napo18                               9063
+KQRBNPkqrbnp                         8987
+kirlianitalian                       8949
+DOCTAL                               8916
+bingo95                              8773
+smurf42                              8738
+IDISJUDA                             8722
+Lightlike                            8722
+Enialios                             8679
+miki_train                           8617
+Nguyen, Duc Hoa                      8597
+FlaggingIsADisease                   8593
+MrSOK                                8541
+torombot                             8523
+wuzhaobing                           8468
+Barry_Lindon                         8465
+cutemouse83                          8463
+Rumple_DarkOne                       8375
+ElexusChess                          8373
+Herushkanamura                       8326
+Yarebore                             8256
+hungzhao                             8232
+FireFishBOT                          8225
+CXCX83                               8221
+foo0k                                8214
+aaryan_varshney                      8178
+Zayats71                             8130
+EmanBot                              8125
+DenQ                                 8033
+Carlsen, Magnus                      8020
+evg85                                7949
+sutcunuri                            7943
+Yiyi1984                             7936
+odonata-bot                          7836
+kirill_kopyonkin                     7820
+sergolvz                             7808
+LittlePumpkin                        7800
+HomeAp                               7789
+Artur_Arustamyan                     7782
+Prayer791                            7778
+riga1960                             7777
+RL12                                 7726
+AAlmeidaTX                           7720
+Jazzyjef                             7709
+yoseph2013                           7687
+IMFAR                                7661
+Buhmann                              7638
+Sarana, Alexey                       7613
+rasulovvugar                         7558
+emiliooo                             7501
+Gutemaus2019                         7470
+the_forgotten20                      7368
+Kamsky, Gata                         7349
+Renier07                             7346
+gogotaniye                           7345
+Lex6699                              7327
+Neftegor                             7304
+Lopuh99                              7301
+Nikitosikbot_v2                      7288
+Gettingold72                         7279
+GgangbuVip                           7247
+DrMelekess                           7222
+peahuelle                            7205
+QuCq                                 7126
+Andreikin, Dmitry                    7083
+Carobee                              7070
+Prettyfishy                          7060
+MIGV                                 7043
+Kastorcito                           7039
+donotcrymeariver                     7034
+AllGunsBlazing22                     7005
+InanisBot                            6955
+SHINZOUWOSASAGEYO                    6898
+Godfroi                              6845
+Grischuk, Alexander                  6844
+theyknowme4my1tap                    6836
+JFDRR                                6799
+theonlyoneshoo                       6790
+musadlane                            6763
+ThePatrick27                         6738
+evilhamburger                        6731
+Rekcul                               6724
+Valerii1122334455                    6694
+SouthAfricanWolf                     6690
+MartinLorenzini                      6646
+Kosteniuk, Alexandra                 6645
+Gorin, Leonid                        6637
+hossein_babaee                       6618
+Caruana, Fabiano                     6614
+adask10                              6610
+Africaata                            6589
+Paavo87                              6578
+Vachier-Lagrave, Maxime              6566
+LiVaEv                               6554
+Shirov, Alexei                       6553
+OUT-knock123                         6539
+abking1971                           6511
+Satyakeswara_BOT                     6470
+Alfilparanoico                       6454
+Paravyan, David                      6453
+pupilochess86                        6423
+LeelaMultiPoss                       6398
+Pescaderocalvo                       6388
+ertras                               6384
+carguru                              6359
+SuperConfinado                       6354
+Cerdifixer                           6352
+G0DZILLA                             6352
+Rakhmanov, Aleksandr                 6348
+Peligro_98                           6344
+MightBeDecent                        6338
+BulletCoach                          6328
+shuriks91                            6309
+alesig71                             6287
+Markosian, David S.                  6279
+simbelmyne-bot                       6262
+Chigaev, Maksim                      6259
+Kelevra317                           6256
+Bluebaum, Matthias                   6255
+BardiaVeisi                          6203
+balaverde                            6190
+vvchessli                            6184
+Aronian, Levon                       6132
+Darkmaul11                           6117
+lawstorant                           6094
+fmjoseherrera                        6087
+Serg_01                              6077
+Svane, Rasmus                        6069
+Juvenilia                            6055
+Greifax                              6040
+KhatanbaatarGM                       6040
+notrashopenings                      6032
+TheRedKing89                         6004
+ice2breaker                          5992
+Catinlove                            5982
+Sjugirov, Sanan                      5980
+anand68                              5973
+Rekcirts                             5970
+Tepeme                               5969
+SHEFFFF                              5960
+Crest64                              5955
+Mamedyarov, Shakhriyar               5947
+apollothedog                         5944
+Bortnyk, Olexandr                    5943
+Mapwright                            5940
+gmcyborek                            5936
+Ac1000                               5932
+Meysonn                              5921
+RenierChess                          5905
+Saraci, Nderim                       5900
+Dr-CRO                               5897
+Dierforator                          5890
+AttackingBeast                       5881
+Martinez Alcantara, Jose Eduardo     5864
+ffl0                                 5852
+Hammurapi65                          5841
+Boris_Markoja                        5799
+kouchich                             5790
+Belsychess                           5789
+Opteron85                            5785
+Orlando_Gloom                        5783
+yobot_v2                             5775
+Strelok2222                          5754
+PowerDrive                           5741
+GMJOEY93                             5741
+sjakk98765                           5736
+Poirot_Hercule                       5734
+Banelevich                           5724
+Pendos666                            5722
+MaLeKkoNihli                         5710
+JuroJ                                5702
+outoftheblu                          5702
+Liverpool_the_best                   5671
+Mr-Chess-Berserk                     5650
+Fratz71                              5643
+Larsen, Magnus                       5633
+Zeveraar-Glen                        5628
+KamranShirazi                        5624
+estocastico                          5623
+FastCavalier                         5598
+dedyka                               5597
+Plmlgs99                             5595
+Saparmyrat                           5584
+Filip88                              5580
+nickVet                              5579
+AfricanJo                            5577
+imnotsohuman                         5576
+i_love_1C                            5557
+O-Almeida                            5541
+DmDonCh                              5536
+bob_2004                             5517
+Mitrabha, Guha                       5497
+Bacrot, Etienne                      5493
+LSGeneraal                           5486
+Durarbayli, Vasif                    5481
+Nikolaj_6                            5481
+siddy2006                            5478
+FantacticEman                        5471
+bot_adario                           5469
+Pap, Gyula                           5440
+filmer75                             5431
+Indjic, Aleksandar                   5407
+oyoy23                               5371
+Ivanchuk, Vasyl                      5365
+Rustemov, Alexander                  5365
+So, Wesley                           5357
+Naaas                                5351
+Nepomniachtchi, Ian                  5342
+chesshyperbot                        5338
+Firouzja, Alireza                    5331
+Kamo_Gurtovoy85                      5324
+Bodoque55                            5318
+Stoichess                            5313
+TheCableBox                          5308
+caissa-ai                            5307
+Jobava, Baadur                       5297
+Tulachessroom                        5288
+kichot78                             5278
+AceBonaventura                       5274
+Cheng-4                              5264
+RomChartres                          5263
+Deac, Bogdan-Daniel                  5260
+ma_long_ma                           5258
+sumsar42                             5253
+T-Stevenson                          5240
+SerHio1963                           5238
+gg-gm-gmg                            5232
+littleplotkin                        5227
+retardedplatypus123                  5216
+Fedoseev, Vladimir                   5209
+rustevs                              5201
+Oparin, Grigoriy                     5194
+Salzmann, Stefan                     5173
+Agent_000                            5170
+Andrey_Klymchuk                      5158
+JackHenry                            5141
+Mirzoev, Azer                        5131
+Xiong, Jeffery                       5120
+GingerGM                             5113
+liczner                              5109
+Alexsur81                            5103
+Frutek                               5097
+Apjoshua                             5083
+Beta99                               5076
+a1c2a3b1c3a2c1b3                     5072
+sapphire_phoenix                     5064
+Donchenko, Alexander                 5041
+CivEn                                5037
+jeromeovich                          5034
+sergeikim2003                        5031
+borisov_maxim                        5018
+Svidler, Peter                       5018
+Digora                               5015
+Lunaticxxx                           5011
+jieltmcommeta                        5008
+gammadrill                           5004
+EddieMarsalla                        5003
+Shineshou90_BOT                      5002
+Gligoric16                           5002
+Daskevich                            5001
