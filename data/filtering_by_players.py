@@ -3,7 +3,8 @@ import os
 import pandas as pd
 import gc
 
-csvs_dir = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\DATA_PROJECT"
+#csvs_dir = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\DATA_PROJECT"
+csvs_dir = r"C:\Users\giuli\PycharmProjects\DeepL_project_test\data\all_games_csvs"
 outfile_path = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\filtered_games_nobots.csv"
 
 FIDE_RECOGNIZED_TITLES = ['IM', 'FM', 'CM', 'GM', 'NM', 'FIDE']
@@ -80,8 +81,8 @@ def create_list_of_players(txtFile) -> list:
 #most_common_players = find_most_common_players(csvs_dir)
 #print(most_common_players)
 
-players = create_list_of_players('C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\data\\filtered_player_counts_output.txt')
-print(players)
+#players = create_list_of_players('C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\data\\filtered_player_counts_output.txt')
+#print(players)
 
 '''
 ['ArasanX', 'MassterofMayhem', 'JelenaZ', 'lestri', 'doreality', 'therealYardbird', 'Chesssknock', 
@@ -95,10 +96,15 @@ print(players)
 'Attila76', 'Karlos_ulsk', 'www68', 'Podrebo', 'papasi', 'crackcubano', 'Chessibague']
 '''
 
-new_df = filter_by_players(csvs_dir,players)
+NEW_LIST_OF_PLAYERS_MANUAL = ['ArasanX', 'MassterofMayhem', 'JelenaZ', 'lestri', 'doreality', 'therealYardbird', 'Chesssknock',
+'No_signs_of_V', 'Recobachess', 'drawingchest', 'kasparik_garik', 'ChainsOfFantasia','Consent_to_treatment',
+'Alexandr_KhleBovich', 'unknown-maestro_2450', 'gefuehlter_FM', 'gmmitkov', 'positionaloldman',"Carlsen, Magnus","Nakamura, Hikaru"]
+
+
+new_df = filter_by_players(csvs_dir,NEW_LIST_OF_PLAYERS_MANUAL)
 
 print(new_df.head())
 
 print("Saving new dataframe")
-new_df.to_csv(outfile_path,index=False)
+new_df.to_csv(r"C:\Users\giuli\PycharmProjects\DeepL_project_test\data\filtered_games_new.csv",index=False)
 print("Saved")

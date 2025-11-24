@@ -14,23 +14,20 @@ MIN_TRANSFORMERS_VERSION = '4.25.1'
 # check transformers version
 assert transformers.__version__ >= MIN_TRANSFORMERS_VERSION, f'Please upgrade transformers to version {MIN_TRANSFORMERS_VERSION} or higher.'
 
-LIST_OF_PLAYERS = ["Carlsen, Magnus",
-                   "Cramling Bellon, Anna",
-                   "Caruana, Fabiano",
-                   "Nepomniachtchi, Ian",
-                   "Firouzja, Alireza",
-                   "Giri, Anish",
-                   "Niemann, Hans",
-                   "Cramling, Pia",
-                   "Nakamura, Hikaru",
-                   "Botez, Alexandra",
-                   "Botez, Andrea",
-                   "Belenkaya, Dina",
-                   "So, Wesley",]
+LIST_OF_PLAYERS = ['ArasanX','MassterofMayhem',
+                   'JelenaZ','lestri',
+                   'doreality','therealYardbird',
+                   'Chesssknock','No_signs_of_V',
+                   'Recobachess','drawingchest',
+                   'kasparik_garik', 'ChainsOfFantasia',
+                   'Consent_to_treatment','Alexandr_KhleBovich',
+                   'unknown-maestro_2450', 'gefuehlter_FM',
+                   'gmmitkov', 'positionaloldman',
+                   "Carlsen, Magnus","Nakamura, Hikaru"]
 
 
-csv_path = r"C:\Users\giuli\PycharmProjects\DeepL_project_test\data\filtered_games_new.csv"
-batch_size = 16
+csv_path = r"filtered_games_new.csv"
+batch_size = 256
 train_ratio = 0.9
 val_ratio = 0.05
 test_ratio = 0.05
@@ -46,11 +43,16 @@ for col in ['game_type', 'time_control', 'moves']:
     df_white[col] = df_white[col].fillna('').astype(str)
     df_black[col] = df_black[col].fillna('').astype(str)
 
+
 y_white = pd.Series(df_white['white_name'])
 y_black = pd.Series(df_black['black_name'])
 y = pd.concat([y_white, y_black], axis=0, ignore_index=True, sort=False)
 
-# TODO creare y con white e black ELO
+df_white_black = pd.concat([df_white, df_black], axis=0, ignore_index=True, sort=False)
+df_white_black['white_elo'] = df_white_black['white_elo'].replace('NOT_FOUND', 1000).astype(float)
+df_white_black['black_elo'] = df_white_black['black_elo'].replace('NOT_FOUND', 1000).astype(float)
+
+elos = np.vstack([df_white_black['white_elo'].to_numpy(), df_white_black['black_elo'].to_numpy()]).T.astype(np.float32)
 
 df_white['transformer_input'] = ("1 " + df_white['game_type'] + " " + df_white['time_control'] + " " + df_white['moves'])
 
@@ -66,10 +68,10 @@ print(X.shape)
 print(y.shape)
 
 
-X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=(1 - train_ratio), shuffle=shuffle)
+X_train, X_temp, y_train, y_temp, elos_train, elos_temp = train_test_split(X, y,elos, test_size=(1 - train_ratio), shuffle=shuffle)
 
 val_size = val_ratio / (val_ratio + test_ratio)
-X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=(1 - val_size), shuffle=shuffle)
+X_val, X_test, y_val, y_test, elos_val, elos_test = train_test_split(X_temp, y_temp,elos_temp, test_size=(1 - val_size), shuffle=shuffle)
 
 print(X_train.shape)
 print(X_val.shape)
@@ -83,11 +85,12 @@ class ChessDataset_transformer(Dataset):
     """
     TODO
     """
-    def __init__(self, texts, labels, tokenizer, max_length=512):
+    def __init__(self, texts, labels, elos, tokenizer, max_length=512):
         self.texts = texts
-        self.labels = [self.player_to_idx(name) for name in labels]  # Keep as list
+        self.class_labels = [self.player_to_idx(name) for name in labels]
+        self.regression_labels = elos
         self.tokenizer = tokenizer
-        self.max_length = max_length # TODO CHANGE TO FEED the new model
+        self.max_length = max_length  # TODO CHANGE TO FEED the new model
 
     def __len__(self):
         return len(self.texts)
@@ -104,7 +107,8 @@ class ChessDataset_transformer(Dataset):
         item = {k: v.squeeze(0) for k, v in encoding.items()}  # remove batch dim
 
         # Convert label to tensor here (per batch)
-        item['labels'] = torch.tensor(self.labels[idx], dtype=torch.long)
+        item['class_labels'] = torch.tensor(self.class_labels[idx], dtype=torch.long)
+        item['regression_labels'] = torch.tensor(self.regression_labels[idx], dtype=torch.float32)
         return item
 
     def player_to_idx(self, name):
@@ -116,7 +120,7 @@ class ChessDataset_transformer(Dataset):
 model_name = "Waterhorse/chessgpt-base-v1"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-chessgpt = AutoModel.from_pretrained(model_name, num_labels=14)
+chessgpt = AutoModel.from_pretrained(model_name)
 
 tokenizer.pad_token = tokenizer.eos_token
 chessgpt.config.pad_token_id = tokenizer.eos_token_id
@@ -206,14 +210,11 @@ class MultiTaskTransformer(nn.Module):
     def forward(self, input_ids, attention_mask=None):
         outputs = self.base_model(input_ids=input_ids, attention_mask=attention_mask)
 
-        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None and self.use_cls_if_available:
-            pooled = outputs.pooler_output
+        last_hidden = outputs.last_hidden_state
+        if attention_mask is None:
+            pooled = last_hidden.mean(dim=1)
         else:
-            last_hidden = outputs.last_hidden_state
-            if attention_mask is None:
-                pooled = last_hidden.mean(dim=1)
-            else:
-                pooled = masked_mean_pooling(last_hidden, attention_mask)
+            pooled = masked_mean_pooling(last_hidden, attention_mask)
 
         shared_repr = self.shared(pooled)
 
@@ -244,11 +245,9 @@ for name, p in model.named_parameters():
 
 print(model)
 
-torch.manual_seed(42)
-
-train_dataset = ChessDataset_transformer(X_train, y_train, tokenizer, max_length=128)
-val_dataset = ChessDataset_transformer(X_val, y_val, tokenizer, max_length=128)
-test_dataset = ChessDataset_transformer(X_test, y_test, tokenizer, max_length=128)
+train_dataset = ChessDataset_transformer(X_train, y_train, elos_train, tokenizer, max_length=128)
+val_dataset = ChessDataset_transformer(X_val, y_val, elos_val, tokenizer, max_length=128)
+test_dataset = ChessDataset_transformer(X_test, y_test, elos_test, tokenizer, max_length=128)
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -256,7 +255,7 @@ test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 print(len(train_loader))
 
-optimizer = AdamW(model.parameters(), lr=5e-5)
+optimizer = AdamW(model.parameters(), lr=9e-4)
 
 torch.manual_seed(42)
 
@@ -277,7 +276,6 @@ def train_validate(train_loader: DataLoader,
     model.train()
     c = 0
     for batch in train_loader:
-        torch.cuda.empty_cache()
         c += 1
         if c % 10 == 0:
             print(f"fatti {c * batch_size}")
@@ -285,20 +283,26 @@ def train_validate(train_loader: DataLoader,
 
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
-        labels = batch["labels"].to(device)
+        class_labels = batch["class_labels"].to(device)
+        reg_labels = batch["regression_labels"].to(device)
 
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-        loss = outputs.loss
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        class_logits = outputs["classification"]
+        reg_values = outputs["regression"]
 
-        batch_losses_train.append(loss.item())
+        ce_loss = torch.nn.functional.cross_entropy(class_logits, class_labels)
+        mse_loss = torch.nn.functional.mse_loss(reg_values, reg_labels)
 
-        model.zero_grad()
+        loss = ce_loss + 0.2 * mse_loss  # TODO weight regression appropriately
+        print(loss)
+        batch_losses_train.append(loss)
+
         loss.backward()
         optimizer.step()
 
-        preds = torch.argmax(outputs.logits, dim=1)
-        correct += (preds == labels).sum().item()
-        total += labels.size(0)
+        preds = torch.argmax(class_logits, dim=1)
+        correct += (preds == class_labels).sum().item()
+        total += class_labels.size(0)
 
     accuracy = correct / total
     print(f"Training Accuracy: {accuracy:.4f}")
@@ -309,23 +313,34 @@ def train_validate(train_loader: DataLoader,
 
     correct = 0
     total = 0
+    batch_losses_val = []
 
     for batch in validation_loader:
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
-        labels = batch["labels"].to(device)
+        class_labels = batch["class_labels"].to(device)
+        reg_labels = batch["regression_labels"].to(device)
 
         with torch.no_grad():
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            preds = torch.argmax(outputs.logits, dim=1)
+            preds = outputs["classification"].argmax(dim=1)
 
-        correct += (preds == labels).sum().item()
-        total += labels.size(0)
+        ce_loss = torch.nn.functional.cross_entropy(preds, class_labels)
+        mse_loss = torch.nn.functional.mse_loss(outputs["regression"], reg_labels)
+
+        loss = ce_loss + 0.2 * mse_loss
+        print(loss.item())
+        batch_losses_val.append(loss.item())
+
+        correct += (preds == class_labels).sum().item()
+        total += class_labels.size(0)
 
     accuracy = correct / total
     print(f"Validation Accuracy: {accuracy:.4f}")
 
-    return avg_train_loss
+    avg_val_loss = np.mean(batch_losses_val)
+
+    return avg_train_loss, avg_val_loss
 
 
 def test(test_loader: DataLoader,
@@ -335,26 +350,37 @@ def test(test_loader: DataLoader,
 
     correct = 0
     total = 0
+    batch_losses_test = []
 
     for batch in test_loader:
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
-        labels = batch["labels"].to(device)
+        class_labels = batch["class_labels"].to(device)
+        reg_labels = batch["regression_labels"].to(device)
+
         with torch.no_grad():
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             preds = torch.argmax(outputs.logits, dim=1)
 
-        correct += (preds == labels).sum().item()
-        total += labels.size(0)
+        ce_loss = torch.nn.functional.cross_entropy(preds, class_labels)
+        mse_loss = torch.nn.functional.mse_loss(outputs["regression"], reg_labels)
+
+        loss = ce_loss + 0.2 * mse_loss
+        print(loss.item())
+        batch_losses_test.append(loss.item())
+
+        correct += (preds == class_labels).sum().item()
+        total += class_labels.size(0)
     accuracy = correct / total
     print(f"Test Accuracy: {accuracy:.4f}")
+    avg_test_loss = np.mean(batch_losses_test)
 
-    return 0  # TODO more metrics and maby return instead of print?
+    return avg_test_loss
 
 
 for epoch in range(num_epochs):
-  avg_train_loss = train_validate(train_loader,val_loader,model,optimizer,device)
-  print(f"avg_train_loss {avg_train_loss}")
-  #print(f"avg_val_loss {avg_val_loss}")
+    avg_train_loss, avg_val_loss = train_validate(train_loader,val_loader,model,optimizer,device)
+    print(f"avg_train_loss {avg_train_loss}")
+    print(f"avg_val_loss {avg_val_loss}")
 
 nul = test(test_loader,model,device)
