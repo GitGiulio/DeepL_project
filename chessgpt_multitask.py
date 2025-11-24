@@ -5,9 +5,11 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
-from torch.nn import CrossEntropyLoss
 from torch import nn
 import numpy as np
+from torch.amp import autocast,GradScaler
+
+from transformers import get_scheduler
 
 MIN_TRANSFORMERS_VERSION = '4.25.1'
 
@@ -28,12 +30,6 @@ LIST_OF_PLAYERS = ['ArasanX','MassterofMayhem',
 
 csv_path = r"filtered_games_new.csv"
 batch_size = 256
-train_ratio = 0.9
-val_ratio = 0.05
-test_ratio = 0.05
-shuffle = True
-num_epochs = 10
-
 df = pd.read_csv(csv_path)
 
 df_white = df[df['white_name'].isin(LIST_OF_PLAYERS)].copy()
@@ -68,10 +64,10 @@ print(X.shape)
 print(y.shape)
 
 
-X_train, X_temp, y_train, y_temp, elos_train, elos_temp = train_test_split(X, y,elos, test_size=(1 - train_ratio), shuffle=shuffle)
+X_train, X_temp, y_train, y_temp, elos_train, elos_temp = train_test_split(X, y,elos, test_size=(1 - 0.9), shuffle=True)
 
-val_size = val_ratio / (val_ratio + test_ratio)
-X_val, X_test, y_val, y_test, elos_val, elos_test = train_test_split(X_temp, y_temp,elos_temp, test_size=(1 - val_size), shuffle=shuffle)
+val_size = 0.05 / (0.9 + 0.05)
+X_val, X_test, y_val, y_test, elos_val, elos_test = train_test_split(X_temp, y_temp,elos_temp, test_size=(1 - val_size))
 
 print(X_train.shape)
 print(X_val.shape)
@@ -136,7 +132,7 @@ def masked_mean_pooling(last_hidden_state, attention_mask):
 
 
 class SharedTwoLayerMLP(nn.Module):
-    def __init__(self, in_dim, shared_dim1=1024, shared_dim2=512, dropout=0.1):
+    def __init__(self, in_dim, shared_dim1, shared_dim2, dropout):
         super().__init__()
         self.fc1 = nn.Linear(in_dim, shared_dim1)
         self.fc2 = nn.Linear(shared_dim1, shared_dim2)
@@ -144,13 +140,13 @@ class SharedTwoLayerMLP(nn.Module):
         self.act = nn.GELU()
 
     def forward(self, x):
-        x = self.dropout(self.act(self.fc1(x)))  # shared layer 1
-        x = self.dropout(self.act(self.fc2(x)))  # shared layer 2
-        return x                                  # shared representation
+        x = self.dropout(self.act(self.fc1(x)))
+        x = self.dropout(self.act(self.fc2(x)))
+        return x
 
 
 class ClassificationHead(nn.Module):
-    def __init__(self, in_dim, num_classes=20, head_dim=256, dropout=0.1):
+    def __init__(self, in_dim, num_classes, head_dim, dropout):
         super().__init__()
         self.fc = nn.Linear(in_dim, head_dim)
         self.out = nn.Linear(head_dim, num_classes)
@@ -164,7 +160,7 @@ class ClassificationHead(nn.Module):
 
 
 class RegressionHead(nn.Module):
-    def __init__(self, in_dim, out_dim=2, head_dim=256, dropout=0.1):
+    def __init__(self, in_dim, out_dim, head_dim, dropout):
         super().__init__()
         self.fc = nn.Linear(in_dim, head_dim)
         self.out = nn.Linear(head_dim, out_dim)
@@ -178,8 +174,7 @@ class RegressionHead(nn.Module):
 
 
 class MultiTaskTransformer(nn.Module):
-    def __init__(self, base_model, num_classes=20, num_regression=2,
-                 shared_dim1=1024, shared_dim2=512, head_dim=256, dropout=0.1,
+    def __init__(self, base_model, num_classes, num_regression,shared_dim1, shared_dim2, head_dim, dropout,
                  use_cls_if_available=True):
         super().__init__()
         self.base_model = base_model
@@ -231,9 +226,9 @@ model = MultiTaskTransformer(
     base_model=chessgpt,
     num_classes=20,
     num_regression=2,
-    shared_dim1=1024,
-    shared_dim2=512,
-    head_dim=256,
+    shared_dim1=512,
+    shared_dim2=256,
+    head_dim=128,
     dropout=0.1
 )
 
@@ -245,9 +240,9 @@ for name, p in model.named_parameters():
 
 print(model)
 
-train_dataset = ChessDataset_transformer(X_train, y_train, elos_train, tokenizer, max_length=128)
-val_dataset = ChessDataset_transformer(X_val, y_val, elos_val, tokenizer, max_length=128)
-test_dataset = ChessDataset_transformer(X_test, y_test, elos_test, tokenizer, max_length=128)
+train_dataset = ChessDataset_transformer(X_train, y_train, elos_train, tokenizer, max_length=256)
+val_dataset = ChessDataset_transformer(X_val, y_val, elos_val, tokenizer, max_length=256)
+test_dataset = ChessDataset_transformer(X_test, y_test, elos_test, tokenizer, max_length=256)
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -255,9 +250,8 @@ test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 print(len(train_loader))
 
-optimizer = AdamW(model.parameters(), lr=9e-4)
-
-torch.manual_seed(42)
+optimizer = AdamW(model.parameters(), lr=2e-4,weight_decay=0.01)  # TODO set up scheduler start from 2e-4 and decrease every epoch
+scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=80, num_training_steps=3000)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -268,7 +262,12 @@ def train_validate(train_loader: DataLoader,
                    validation_loader: DataLoader,
                    model: nn.Module,
                    optimizer,
-                   device: torch.device):
+                   scheduler,
+                   device: torch.device,
+                   alpha=0.2):
+
+    scaler = GradScaler()
+
     correct = 0
     total = 0
     batch_losses_train = []  # each batch, the loss is stored and later averaged to get an average train loss per epoch
@@ -279,6 +278,8 @@ def train_validate(train_loader: DataLoader,
         c += 1
         if c % 10 == 0:
             print(f"fatti {c * batch_size}")
+            break
+
         optimizer.zero_grad()
 
         input_ids = batch["input_ids"].to(device)
@@ -286,26 +287,28 @@ def train_validate(train_loader: DataLoader,
         class_labels = batch["class_labels"].to(device)
         reg_labels = batch["regression_labels"].to(device)
 
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        class_logits = outputs["classification"]
-        reg_values = outputs["regression"]
+        with autocast(device.type):
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            class_logits = outputs["classification"]
 
-        ce_loss = torch.nn.functional.cross_entropy(class_logits, class_labels)
-        mse_loss = torch.nn.functional.mse_loss(reg_values, reg_labels)
+            ce_loss = torch.nn.functional.cross_entropy(class_logits, class_labels)
+            huber_loss = torch.nn.functional.smooth_l1_loss(outputs["regression"], reg_labels)
+            loss = ce_loss + alpha * huber_loss  # TODO weight regression appropriately
 
-        loss = ce_loss + 0.2 * mse_loss  # TODO weight regression appropriately
-        print(loss)
-        batch_losses_train.append(loss)
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        scheduler.step()
 
-        loss.backward()
-        optimizer.step()
+        print(loss.item())
+        batch_losses_train.append(loss.item())
 
         preds = torch.argmax(class_logits, dim=1)
         correct += (preds == class_labels).sum().item()
         total += class_labels.size(0)
 
-    accuracy = correct / total
-    print(f"Training Accuracy: {accuracy:.4f}")
+    train_accuracy = correct / total
+    print(f"Training Accuracy: {train_accuracy:.4f}")
 
     avg_train_loss = np.mean(batch_losses_train)
 
@@ -321,22 +324,24 @@ def train_validate(train_loader: DataLoader,
         class_labels = batch["class_labels"].to(device)
         reg_labels = batch["regression_labels"].to(device)
 
-        with torch.no_grad():
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            preds = outputs["classification"].argmax(dim=1)
+        with autocast(device.type):
+            with torch.no_grad():
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
 
-        ce_loss = torch.nn.functional.cross_entropy(preds, class_labels)
-        mse_loss = torch.nn.functional.mse_loss(outputs["regression"], reg_labels)
+            ce_loss = torch.nn.functional.cross_entropy(outputs["classification"], class_labels)
+            huber_loss = torch.nn.functional.smooth_l1_loss(outputs["regression"], reg_labels)
+            loss = ce_loss + alpha * huber_loss
 
-        loss = ce_loss + 0.2 * mse_loss
         print(loss.item())
         batch_losses_val.append(loss.item())
 
+        preds = outputs["classification"].argmax(dim=1)
         correct += (preds == class_labels).sum().item()
         total += class_labels.size(0)
+        break
 
-    accuracy = correct / total
-    print(f"Validation Accuracy: {accuracy:.4f}")
+    val_accuracy = correct / total
+    print(f"Validation Accuracy: {val_accuracy:.4f}")
 
     avg_val_loss = np.mean(batch_losses_val)
 
@@ -345,7 +350,8 @@ def train_validate(train_loader: DataLoader,
 
 def test(test_loader: DataLoader,
          model: nn.Module,
-         device: torch.device):
+         device: torch.device,
+         alpha=0.2):
     model.eval()
 
     correct = 0
@@ -360,15 +366,15 @@ def test(test_loader: DataLoader,
 
         with torch.no_grad():
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            preds = torch.argmax(outputs.logits, dim=1)
 
-        ce_loss = torch.nn.functional.cross_entropy(preds, class_labels)
-        mse_loss = torch.nn.functional.mse_loss(outputs["regression"], reg_labels)
+        ce_loss = torch.nn.functional.cross_entropy(outputs["classification"], class_labels)
+        huber_loss = torch.nn.functional.smooth_l1_loss(outputs["regression"], reg_labels)
 
-        loss = ce_loss + 0.2 * mse_loss
+        loss = ce_loss + alpha * huber_loss
         print(loss.item())
         batch_losses_test.append(loss.item())
 
+        preds = outputs["classification"].argmax(dim=1)
         correct += (preds == class_labels).sum().item()
         total += class_labels.size(0)
     accuracy = correct / total
@@ -378,9 +384,58 @@ def test(test_loader: DataLoader,
     return avg_test_loss
 
 
-for epoch in range(num_epochs):
-    avg_train_loss, avg_val_loss = train_validate(train_loader,val_loader,model,optimizer,device)
+def unfreeze_last_layer(model):
+    last_block = model.base_model.layers[-1]
+    for p in last_block.parameters():
+        p.requires_grad = True
+
+    for p in model.base_model.final_layer_norm.parameters():
+        p.requires_grad = True
+
+    print(f"Unfroze last transformer layer.")
+
+
+epochs_non_improved = 0
+best_val_loss = float("inf")
+for epoch in range(10):
+    avg_train_loss, avg_val_loss = train_validate(train_loader,val_loader,model,optimizer,scheduler,device)
     print(f"avg_train_loss {avg_train_loss}")
     print(f"avg_val_loss {avg_val_loss}")
+    if epochs_non_improved == 2:
+        print(f"Epoch {epoch + 1}\n-----------------------------------------------")
+        #print(f"Train Loss: {avg_train_loss:>7f}\tTrain Accuracy: {(100 * train_accuracy):>0.1f}%")
+        #print(f"Validation Loss: {avg_val_loss:>7f}\tValidation Accuracy: {(100 * avg_val_accuracy):>0.1f}%")
+        print(f"------------------------------------------------------------")
+        break
+    elif best_val_loss > avg_val_loss:
+        epochs_non_improved = 0
+        best_loss = avg_val_loss
+        torch.save(model.state_dict(), "best_model.pth")
+    else:
+        # print(f"NOT improved {epochs_non_improved} epochs")
+        epochs_non_improved += 1
 
-nul = test(test_loader,model,device)
+    if epoch == 4:
+        unfreeze_last_layer(model)
+
+        trainable_params = [p for p in model.parameters() if p.requires_grad]
+
+        head_params = []
+        backbone_params = []
+        for name, p in model.named_parameters():
+            if p.requires_grad:
+                if name.startswith("shared") or name.startswith("classifier") or name.startswith("regressor"):
+                    head_params.append(p)
+                else:
+                    backbone_params.append(p)
+
+        optimizer = torch.optim.AdamW([
+            {"params": head_params, "lr": 1e-4, "weight_decay": 0.01},  # heads: faster LR
+            {"params": backbone_params, "lr": 2e-5, "weight_decay": 0.01},  # unfrozen GPT-NeoX blocks: smaller LR
+        ])
+
+        scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=100, num_training_steps=4000)
+
+model.load_state_dict(torch.load("best_model.pth"))    # I load the model that performed better on validation
+
+nul = test(test_loader,model,device)  # I test only the best model
