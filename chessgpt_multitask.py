@@ -79,7 +79,8 @@ print(y_test.shape)
 
 class ChessDataset_transformer(Dataset):
     """
-    TODO
+    This is a custom dataset that enables the feeding of chess games as input for our transformer-based model
+    It tokenize the input text and transform both classification labels and elo-regression labels in torch.tensors
     """
     def __init__(self, texts, labels, elos, tokenizer, max_length=512):
         self.texts = texts
@@ -132,12 +133,16 @@ def masked_mean_pooling(last_hidden_state, attention_mask):
 
 
 class SharedTwoLayerMLP(nn.Module):
+    """
+    This is the first part of the multitask MLP that we added to the pretrained-transformer, and is shared between both tasks
+    It consists of 2 fully connected layers, each followed by GELU activation function
+    """
     def __init__(self, in_dim, shared_dim1, shared_dim2, dropout):
         super().__init__()
         self.fc1 = nn.Linear(in_dim, shared_dim1)
         self.fc2 = nn.Linear(shared_dim1, shared_dim2)
         self.dropout = nn.Dropout(dropout)
-        self.act = nn.GELU()
+        self.act = nn.GELU()  # GELU is the same act fun of the transformer, but we can also try simple RELU
 
     def forward(self, x):
         x = self.dropout(self.act(self.fc1(x)))
@@ -146,6 +151,11 @@ class SharedTwoLayerMLP(nn.Module):
 
 
 class ClassificationHead(nn.Module):
+    """
+    This is the Classification specific end of the network,
+    it consists of 1 fully connected layer, followed by a GELU activation function,
+    then another fully connected layer that ends in N neurons (where N is the number of classes)
+    """
     def __init__(self, in_dim, num_classes, head_dim, dropout):
         super().__init__()
         self.fc = nn.Linear(in_dim, head_dim)
@@ -160,6 +170,11 @@ class ClassificationHead(nn.Module):
 
 
 class RegressionHead(nn.Module):
+    """
+    This is the Regression specific end of the network,
+    it consists of 1 fully connected layer, followed by a GELU activation function,
+    then another fully connected layer that ends in 2 neurons since we need to predict 2 ELO values
+    """
     def __init__(self, in_dim, out_dim, head_dim, dropout):
         super().__init__()
         self.fc = nn.Linear(in_dim, head_dim)
@@ -174,6 +189,9 @@ class RegressionHead(nn.Module):
 
 
 class MultiTaskTransformer(nn.Module):
+    """
+    In this class we put all the previous parts together, after the pretrained transformer
+    """
     def __init__(self, base_model, num_classes, num_regression,shared_dim1, shared_dim2, head_dim, dropout,
                  use_cls_if_available=True):
         super().__init__()
@@ -231,6 +249,8 @@ model = MultiTaskTransformer(
     head_dim=128,
     dropout=0.1
 )
+
+# model.load_state_dict(torch.load("best_model.pth")) <- this let us restart training from the last best model (not always a good idea)
 
 for p in model.base_model.parameters():
     p.requires_grad = False
