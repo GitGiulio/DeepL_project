@@ -18,7 +18,7 @@ def filter_lines_by_matches(filepath, list_of_players):
     --I can also add additional columns with other data like--
     Col 3(PlayerElo): "elo" <- giving those to the model would be kinda cheating
     Col 4(Opponent): "Player name"
-    Col 5(OpponentElo): "elo" <- giving those to the model would be kinda cheatingù
+    Col 5(OpponentElo): "elo" <- giving those to the model would be kinda cheating
 
     Col 7(NumberOfMoves): "number of moves" <-- this may be useful for feeding the model in the proper way
 

@@ -240,6 +240,10 @@ class MultiTaskTransformer(nn.Module):
         }
 
 
+""" 
+This is the actual initialization of the model, we specify 21 classes, since we have 20 players that the network must classify.
+Then we have 2 regression values, because the model should also predict the elo of both players (white and black)
+"""
 model = MultiTaskTransformer(
     base_model=chessgpt,
     num_classes=20,
@@ -405,6 +409,12 @@ def test(test_loader: DataLoader,
 
 
 def unfreeze_last_layer(model):
+    """
+    This function unfreezes the last layer of the transformer,
+    this is because slightly changing the representation of the last layer
+     after a few epochs of training can be very beneficial for the accuracy.
+    This is due to the fact that the representation in the last layer is the most task-specific.
+    """
     last_block = model.base_model.layers[-1]
     for p in last_block.parameters():
         p.requires_grad = True
@@ -414,6 +424,17 @@ def unfreeze_last_layer(model):
 
     print(f"Unfroze last transformer layer.")
 
+
+"""
+Here we have the training loop, where we finetune the added multitask-MLP for 4 epochs,
+ to then unfreeze the last layer of the transformer, and continue with the other 6 epochs.
+We have a dataset of almost 400000 chess games, which are slow to feed to such a big model, therefore we had to settle for this.
+
+After the training is done we save the weights of the best performing model (on the validation set) and we test it on the test set.
+
+The train_validate and test functions return all the useful information regarding the performance of the model,
+ that can be processed and visualized in a second moment.
+"""
 
 epochs_non_improved = 0
 best_val_loss = float("inf")

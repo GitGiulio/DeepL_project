@@ -24,13 +24,16 @@ So the general stucture is "(W/B) n*(n*(x. move|(move move)) n*($y)) (result)" w
 
 ------------------------------------------------------------------------------------------------------------------------
 
-How to use the data?? Maby just transformers + attention + maby somthing else
+How to use the data??
 
 I think a RNN (recurrent neural net) is the best way since we have a undefinetly long series of moves (BUT I'm not sure)
 
-then -> convolutional layers / linear layers / transformers + attention maby??
+Or -> transformers + attention maby??  (Embeddings that use Move as Token + n. + result + (W/B)
 
 output layer -> softmax into N+1 output nodes where N is the number of players we want to be able to classify (number of classes)
-(N+1 beause I think is a good idea to also have data of some other random players to teach the NN to recognise when a game is of NONE of those players)
+
+We want as output the probability of that game being played (either as W or B) by the corresponding player (Node0 == Magnus, ecc...)
+
+(N+1 because I think is a good idea to also have data of some other random players to teach the NN to recognise when a game is of NONE of those players)
 for each player we want a similar amount ~M of games and then either ~M or more (but not to many more) form other random players (mixed of mixed levelse)
 """
