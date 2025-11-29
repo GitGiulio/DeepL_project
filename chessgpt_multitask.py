@@ -8,7 +8,7 @@ from torch.optim import AdamW
 from torch import nn
 import numpy as np
 from torch.amp import autocast,GradScaler
-
+import json
 from transformers import get_scheduler
 
 MIN_TRANSFORMERS_VERSION = '4.25.1'
@@ -29,7 +29,7 @@ LIST_OF_PLAYERS = ['ArasanX','MassterofMayhem',
 
 
 csv_path = r"filtered_games_new.csv"
-batch_size = 256
+batch_size = 128
 df = pd.read_csv(csv_path)
 
 df_white = df[df['white_name'].isin(LIST_OF_PLAYERS)].copy()
@@ -68,6 +68,15 @@ X_train, X_temp, y_train, y_temp, elos_train, elos_temp = train_test_split(X, y,
 
 val_size = 0.05 / (0.9 + 0.05)
 X_val, X_test, y_val, y_test, elos_val, elos_test = train_test_split(X_temp, y_temp,elos_temp, test_size=(1 - val_size))
+
+# normalization of regression targets to have the loss in a closer scale to the classification loss
+
+mean_elo = np.mean(elos_train)
+std_elo = np.std(elos_train)
+elos_train = (elos_train - mean_elo) / std_elo
+elos_val = (elos_val - mean_elo) / std_elo
+elos_test = (elos_test - mean_elo) / std_elo
+
 
 print(X_train.shape)
 print(X_val.shape)
@@ -112,18 +121,17 @@ class ChessDataset_transformer(Dataset):
         if name in LIST_OF_PLAYERS:
             return LIST_OF_PLAYERS.index(name)
         else:
-            return len(LIST_OF_PLAYERS)
+            return -1 # note that this never happens
 
-model_name = "Waterhorse/chessgpt-base-v1"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+model_name = "/model/snapshots/e498922d792f3fd7c07471a498ad0a79e0f0b0a0"  # now I am using a local version of the model
+tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
 
-chessgpt = AutoModel.from_pretrained(model_name)
+chessgpt = AutoModel.from_pretrained(model_name, local_files_only=True, low_cpu_mem_usage=True)
 
 tokenizer.pad_token = tokenizer.eos_token
 chessgpt.config.pad_token_id = tokenizer.eos_token_id
-chessgpt.resize_token_embeddings(len(tokenizer))
 
-print(chessgpt)
+#print(chessgpt)
 
 def masked_mean_pooling(last_hidden_state, attention_mask):
     mask = attention_mask.unsqueeze(-1).type_as(last_hidden_state)
@@ -262,7 +270,6 @@ for name, p in model.named_parameters():
     if "shared" in name or "classifier" in name or "regressor" in name:
         p.requires_grad = True
 
-print(model)
 
 train_dataset = ChessDataset_transformer(X_train, y_train, elos_train, tokenizer, max_length=256)
 val_dataset = ChessDataset_transformer(X_val, y_val, elos_val, tokenizer, max_length=256)
@@ -275,7 +282,7 @@ test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 print(len(train_loader))
 
 optimizer = AdamW(model.parameters(), lr=2e-4,weight_decay=0.01)  # TODO set up scheduler start from 2e-4 and decrease every epoch
-scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=80, num_training_steps=3000)
+scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=5, num_training_steps=187) # those steps have been calculated based on the number of data, batch size, accumulator size and n. epochs
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -289,21 +296,18 @@ def train_validate(train_loader: DataLoader,
                    scheduler,
                    device: torch.device,
                    alpha=0.2):
-
     scaler = GradScaler()
 
-    correct = 0
-    total = 0
     batch_losses_train = []  # each batch, the loss is stored and later averaged to get an average train loss per epoch
 
-    model.train()
-    c = 0
-    for batch in train_loader:
-        c += 1
-        if c % 10 == 0:
-            print(f"fatti {c * batch_size}")
-            break
+    # used for f1 score and accuracy metrics
+    pred_labels_train = []
+    true_labels_train = []
+    pred_regression_train = []
+    true_regression_train = []
 
+    model.train()
+    for i,batch in enumerate(train_loader):
         optimizer.zero_grad()
 
         input_ids = batch["input_ids"].to(device)
@@ -314,33 +318,48 @@ def train_validate(train_loader: DataLoader,
         with autocast(device.type):
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             class_logits = outputs["classification"]
+            class_regr = outputs["regression"]
 
             ce_loss = torch.nn.functional.cross_entropy(class_logits, class_labels)
-            huber_loss = torch.nn.functional.smooth_l1_loss(outputs["regression"], reg_labels)
+            huber_loss = torch.nn.functional.smooth_l1_loss(class_regr, reg_labels)
             loss = ce_loss + alpha * huber_loss  # TODO weight regression appropriately
+            loss = loss / 16
 
         scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-        scheduler.step()
+        if (i + 1) % 16 == 0 or i == len(train_loader)-1:
+            print(f"Done {i*16} Batches of {len(train_loader)}")
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
+            scheduler.step()
 
-        print(loss.item())
+
         batch_losses_train.append(loss.item())
 
         preds = torch.argmax(class_logits, dim=1)
-        correct += (preds == class_labels).sum().item()
-        total += class_labels.size(0)
 
-    train_accuracy = correct / total
-    print(f"Training Accuracy: {train_accuracy:.4f}")
+        pred_labels_train.append(preds)
+        true_labels_train.append(class_labels)
+        pred_regression_train.append(class_regr)
+        true_regression_train.append(reg_labels)
+
+    # Format useful lists for calculation of metrics
+    pred_labels_train = torch.cat(pred_labels_train, dim=0).detach().cpu().numpy().flatten()
+    true_labels_train = torch.cat(true_labels_train, dim=0).detach().cpu().numpy().flatten()
+    pred_regression_train = torch.cat(pred_regression_train, dim=0).cpu().detach().numpy().flatten()
+    true_regression_train = torch.cat(true_regression_train, dim=0).cpu().detach().numpy().flatten()
 
     avg_train_loss = np.mean(batch_losses_train)
 
     model.eval()
 
-    correct = 0
-    total = 0
     batch_losses_val = []
+
+    # used for f1 score and accuracy metrics
+    pred_labels_val = []
+    true_labels_val = []
+    pred_regression_val = []
+    true_regression_val = []
 
     for batch in validation_loader:
         input_ids = batch["input_ids"].to(device)
@@ -352,24 +371,36 @@ def train_validate(train_loader: DataLoader,
             with torch.no_grad():
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask)
 
-            ce_loss = torch.nn.functional.cross_entropy(outputs["classification"], class_labels)
-            huber_loss = torch.nn.functional.smooth_l1_loss(outputs["regression"], reg_labels)
+                class_logits = outputs["classification"]
+                class_regr = outputs["regression"]
+
+            ce_loss = torch.nn.functional.cross_entropy(class_logits, class_labels)
+            huber_loss = torch.nn.functional.smooth_l1_loss(class_regr, reg_labels)
             loss = ce_loss + alpha * huber_loss
 
         print(loss.item())
         batch_losses_val.append(loss.item())
 
         preds = outputs["classification"].argmax(dim=1)
-        correct += (preds == class_labels).sum().item()
-        total += class_labels.size(0)
-        break
+        pred_labels_val.append(preds)
+        true_labels_val.append(class_labels)
+        pred_regression_val.append(class_regr)
+        true_regression_val.append(reg_labels)
 
-    val_accuracy = correct / total
-    print(f"Validation Accuracy: {val_accuracy:.4f}")
 
     avg_val_loss = np.mean(batch_losses_val)
 
-    return avg_train_loss, avg_val_loss
+    # Format useful lists for calculation of metrics
+    pred_labels_val = torch.cat(pred_labels_val, dim=0).cpu().detach().numpy().flatten()
+    true_labels_val = torch.cat(true_labels_val, dim=0).cpu().detach().numpy().flatten()
+    pred_regression_val = torch.cat(pred_regression_val, dim=0).cpu().detach().numpy().flatten()
+    true_regression_val = torch.cat(true_regression_val, dim=0).cpu().detach().numpy().flatten()
+
+    return avg_train_loss, avg_val_loss, \
+        (pred_labels_train, true_labels_train), \
+        (pred_labels_val, true_labels_val), \
+        (pred_regression_train, true_regression_train), \
+        (pred_regression_val, true_regression_val)
 
 
 def test(test_loader: DataLoader,
@@ -378,9 +409,11 @@ def test(test_loader: DataLoader,
          alpha=0.2):
     model.eval()
 
-    correct = 0
-    total = 0
     batch_losses_test = []
+    pred_labels_test = []  # used for f1 score and accuracy metrics
+    true_labels_test = []  # used for f1 score and accuracy metrics
+    pred_regression_test = []
+    true_regression_test = []
 
     for batch in test_loader:
         input_ids = batch["input_ids"].to(device)
@@ -391,21 +424,32 @@ def test(test_loader: DataLoader,
         with torch.no_grad():
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
 
-        ce_loss = torch.nn.functional.cross_entropy(outputs["classification"], class_labels)
-        huber_loss = torch.nn.functional.smooth_l1_loss(outputs["regression"], reg_labels)
+            class_logits = outputs["classification"]
+            class_regr = outputs["regression"]
+
+        ce_loss = torch.nn.functional.cross_entropy(class_logits, class_labels)
+        huber_loss = torch.nn.functional.smooth_l1_loss(class_regr, reg_labels)
 
         loss = ce_loss + alpha * huber_loss
         print(loss.item())
         batch_losses_test.append(loss.item())
 
         preds = outputs["classification"].argmax(dim=1)
-        correct += (preds == class_labels).sum().item()
-        total += class_labels.size(0)
-    accuracy = correct / total
-    print(f"Test Accuracy: {accuracy:.4f}")
+
+        pred_labels_test.append(preds)
+        true_labels_test.append(class_labels)
+        pred_regression_test.append(class_regr)
+        true_regression_test.append(reg_labels)
+
+    # Format useful lists for calculation of metrics
+    pred_labels_test = torch.cat(pred_labels_test, dim=0).cpu().detach().numpy().flatten()
+    true_labels_test = torch.cat(true_labels_test, dim=0).cpu().detach().numpy().flatten()
+    pred_regression_test = torch.cat(pred_regression_test, dim=0).cpu().detach().numpy().flatten()
+    true_regression_test = torch.cat(true_regression_test, dim=0).cpu().detach().numpy().flatten()
+
     avg_test_loss = np.mean(batch_losses_test)
 
-    return avg_test_loss
+    return avg_test_loss, (pred_labels_test, true_labels_test), (pred_regression_test, true_regression_test)
 
 
 def unfreeze_last_layer(model):
@@ -438,8 +482,41 @@ The train_validate and test functions return all the useful information regardin
 
 epochs_non_improved = 0
 best_val_loss = float("inf")
+
+metrics_dict = {
+    "avg_train_loss": [],
+    "avg_val_loss": [],
+    "pred_labels_train": [],
+    "true_labels_train": [],
+    "pred_labels_val": [],
+    "true_labels_val": [],
+    "pred_regression_train": [],
+    "true_regression_train": [],
+    "pred_regression_val": [],
+    "true_regression_val": [],
+}
+
 for epoch in range(10):
-    avg_train_loss, avg_val_loss = train_validate(train_loader,val_loader,model,optimizer,scheduler,device)
+    avg_train_loss, avg_val_loss, \
+    (pred_labels_train, true_labels_train), \
+    (pred_labels_val, true_labels_val), \
+    (pred_regression_train, true_regression_train), \
+    (pred_regression_val, true_regression_val) = train_validate(train_loader,val_loader,model,optimizer,scheduler,device)
+
+    metrics_dict["avg_train_loss"].append(avg_train_loss)
+    metrics_dict["avg_val_loss"].append(avg_val_loss)
+    metrics_dict["pred_labels_train"].append(pred_labels_train)
+    metrics_dict["true_labels_train"].append(true_labels_train)
+    metrics_dict["pred_labels_val"].append(pred_labels_val)
+    metrics_dict["true_labels_val"].append(true_labels_val)
+    metrics_dict["pred_regression_train"].append(pred_regression_train)
+    metrics_dict["true_regression_train"].append(true_regression_train)
+    metrics_dict["pred_regression_val"].append(pred_regression_val)
+    metrics_dict["true_regression_val"].append(true_regression_val)
+
+    with open("metrics.json", "w") as f:
+        json.dump(metrics_dict, f)
+
     print(f"avg_train_loss {avg_train_loss}")
     print(f"avg_val_loss {avg_val_loss}")
     if epochs_non_improved == 2:
@@ -475,8 +552,22 @@ for epoch in range(10):
             {"params": backbone_params, "lr": 2e-5, "weight_decay": 0.01},  # unfrozen GPT-NeoX blocks: smaller LR
         ])
 
-        scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=100, num_training_steps=4000)
+        scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=6, num_training_steps=250) # again as above, calculated by me
 
 model.load_state_dict(torch.load("best_model.pth"))    # I load the model that performed better on validation
 
-nul = test(test_loader,model,device)  # I test only the best model
+
+avg_test_loss, (pred_labels_test, true_labels_test), (pred_regression_test, true_regression_test) = test(test_loader,model,device)  # I test only the best model
+
+test_metrics_dict = {
+    "avg_test_loss": avg_test_loss,
+    "pred_labels_test": pred_labels_test,
+    "true_labels_test": true_labels_test,
+    "pred_regression_test": pred_regression_test,
+    "true_regression_test": true_regression_test,
+}
+
+with open("test_metrics.json", "w") as f:
+    json.dump(test_metrics_dict, f)
+
+

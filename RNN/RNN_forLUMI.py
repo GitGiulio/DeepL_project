@@ -1,27 +1,24 @@
 # import all libraries
+import time
+from collections import Counter
+
+import matplotlib.pyplot as plt
 import numpy as np
-import sklearn.model_selection
-from sklearn.model_selection import train_test_split
-import os
-from tqdm import tqdm
-from PIL import Image
+import pandas as pd
+import seaborn as sns
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader, Subset, random_split
-import torch.optim as optim
-import torchvision.transforms as transforms
-from collections import Counter
-from pathlib import Path
-from io import BytesIO
-
-from sklearn.metrics import f1_score, confusion_matrix, balanced_accuracy_score, classification_report, mean_absolute_error, mean_squared_error, r2_score
-import seaborn as sns
-import matplotlib.pyplot as plt
-import pandas as pd
+from sklearn.metrics import f1_score, confusion_matrix, balanced_accuracy_score, classification_report
+from sklearn.model_selection import train_test_split
 from tabulate import tabulate
+from torch.utils.data import Dataset, DataLoader, Subset
+from tqdm import tqdm
 
+start = time.time()  # Record start time
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+print(f"using: {device}")
 
 # import games in csv
 #csv_path = "/content/drive/MyDrive/filtered_games_20_players.csv"
@@ -45,8 +42,8 @@ NEW_LIST_OF_PLAYERS_MANUAL = [
     'gefuehlter_FM','gmmitkov','positionaloldman',"Carlsen, Magnus","Nakamura, Hikaru"
 ]
 
-BATCH_SIZE = 16
-GAME_LENGTH = 200
+BATCH_SIZE = 128
+GAME_LENGTH = 100
 LEARNING_RATE = 1e-3
 EPOCHS = 100
 
@@ -442,7 +439,7 @@ early_stop_best_model_state = None
 PATIENCE = 20  # after how many epochs of no decrease in loss should we stop
 DELTA = 1e-3  # if the loss decreases with maximum this delta, do not reset the counter
 
-print(f"Beginning training... using {device} device")
+print(f"Beginning training... using {device} device. Elapsed time: {(time.time() - start):.2f} seconds")
 
 for iEpoch in range(EPOCHS):
     t_loss, v_loss, (pltrain, tltrain), (plval, tlval)\
@@ -456,7 +453,7 @@ for iEpoch in range(EPOCHS):
     print(f"Epoch {iEpoch}, training metrics:")
     calculateMetrics(t_loss, pltrain, tltrain)
 
-    print(f"Epoch {iEpoch}, validation metrics:")
+    print(f"Epoch {iEpoch}, Elapsed time: {(time.time() - start):.2f} seconds , validation metrics:")
     calculateMetrics(v_loss, plval, tlval)
 
     # -- EARLY STOPPING CHECK --
@@ -479,6 +476,7 @@ for iEpoch in range(EPOCHS):
 avg_test_loss, (pred_labels_test, true_labels_test) = test(test_loader=TEST_DATALOADER,
                      model=model,
                      device=device)
-print(f"Epoch {iEpoch}, testing metrics:")
+
+print(f"Epoch {iEpoch},Elapsed time: {(time.time() - start):.2f} seconds, testing metrics:")
 calculateMetrics(avg_test_loss, pred_labels_test, true_labels_test)
 
