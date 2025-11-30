@@ -28,9 +28,39 @@ LIST_OF_PLAYERS = ['ArasanX', 'MassterofMayhem',
                    'gmmitkov', 'positionaloldman',
                    "Carlsen, Magnus", "Nakamura, Hikaru"]
 
-csv_path = r"filtered_games_new.csv"
+csv_path = r"/filtered_games_new.csv"
 batch_size = 128
 df = pd.read_csv(csv_path)
+
+def stratified_random_subset(df, label_col="class", per_class=32, seed=77):
+    """
+    This function is used to take for each class the same number of games
+    """
+    subset_rows = []
+    for cls, group in df.groupby(label_col):
+        take = min(per_class, len(group))
+        if cls in LIST_OF_PLAYERS:
+            subset_rows.append(group.sample(n=take, random_state=seed))
+    return pd.concat(subset_rows).sample(frac=1, random_state=seed).reset_index(drop=True)
+
+
+w_in = df['white_name'].isin(set(LIST_OF_PLAYERS))
+b_in = df['black_name'].isin(set(LIST_OF_PLAYERS))
+
+df['class'] = np.where(
+    w_in,                         # if white_name in L
+    df['white_name'],             # -> choose white_name
+    np.where(
+        b_in,                     # else, if black_name in L
+        df['black_name'],         # -> choose black_name
+        'NONE'                    # else -> NONE
+    )
+)
+
+df = stratified_random_subset(df, label_col="class", per_class=8020) # I take 8020 games for each player, since this is how many we have for the one with the least
+
+# In this I have the biggest possible Dataset while avoiding class imbalance
+
 
 df_white = df[df['white_name'].isin(LIST_OF_PLAYERS)].copy()
 df_black = df[df['black_name'].isin(LIST_OF_PLAYERS)].copy()
@@ -44,8 +74,11 @@ y_black = pd.Series(df_black['black_name'])
 y = pd.concat([y_white, y_black], axis=0, ignore_index=True, sort=False)
 
 df_white_black = pd.concat([df_white, df_black], axis=0, ignore_index=True, sort=False)
-df_white_black['white_elo'] = df_white_black['white_elo'].replace('NOT_FOUND', 1000).astype(float)
-df_white_black['black_elo'] = df_white_black['black_elo'].replace('NOT_FOUND', 1000).astype(float)
+
+df_white_black['white_elo'] = df_white_black['white_elo'].replace('NOT_FOUND', np.nan).astype(float)
+df_white_black['black_elo'] = df_white_black['black_elo'].replace('NOT_FOUND', np.nan).astype(float)
+df_white_black['white_elo'].fillna(df_white_black['white_elo'].mean(), inplace=True)
+df_white_black['black_elo'].fillna(df_white_black['black_elo'].mean(), inplace=True)
 
 elos = np.vstack([df_white_black['white_elo'].to_numpy(), df_white_black['black_elo'].to_numpy()]).T.astype(np.float32)
 
@@ -61,15 +94,19 @@ X = pd.concat([X_white, X_black], axis=0, ignore_index=True, sort=False)
 
 if len(X) != len(y):
     raise ValueError('X and y must have same length')
-print(X.shape)
-print(y.shape)
 
-X_train, X_temp, y_train, y_temp, elos_train, elos_temp = train_test_split(X, y, elos, test_size=(1 - 0.9),
-                                                                           shuffle=True)
+X_train, X_temp, y_train, y_temp, elos_train , elos_temp,  = train_test_split(X, y, elos,test_size=0.15,stratify=y,shuffle=True,random_state=77)
 
-val_size = 0.05 / (0.9 + 0.05)
-X_val, X_test, y_val, y_test, elos_val, elos_test = train_test_split(X_temp, y_temp, elos_temp,
-                                                                     test_size=(1 - val_size))
+X_val, X_test, y_val, y_test, elos_val, elos_test = train_test_split(X_temp, y_temp, elos_temp,test_size=2/3,stratify=y_temp,shuffle=True,random_state=77)
+
+def pretty_counts(n_total, n_train, n_val, n_test):
+    pct = lambda n: 100.0 * n / n_total
+    print(f"Total: {n_total:,}")
+    print(f"Train: {n_train:,} ({pct(n_train):.2f}%)")
+    print(f"Val:   {n_val:,} ({pct(n_val):.2f}%)")
+    print(f"Test:  {n_test:,} ({pct(n_test):.2f}%)")
+
+pretty_counts(len(y), len(y_train), len(y_val), len(y_test))
 
 # normalization of regression targets to have the loss in a closer scale to the classification loss
 
@@ -79,12 +116,8 @@ elos_train = (elos_train - mean_elo) / std_elo
 elos_val = (elos_val - mean_elo) / std_elo
 elos_test = (elos_test - mean_elo) / std_elo
 
-print(X_train.shape)
-print(X_val.shape)
-print(X_test.shape)
-print(y_train.shape)
-print(y_val.shape)
-print(y_test.shape)
+print(f"|-|-|-|-|-|mean_elo: {mean_elo}|-|-|-|-|")
+print(f"|-|-|-|-|-|std_elo: {std_elo}|-|-|-|-|")
 
 
 class ChessDataset_transformer(Dataset):
@@ -125,6 +158,29 @@ class ChessDataset_transformer(Dataset):
         else:
             return -1  # note that this never happens
 
+def unfreeze_last_layers(model):
+    """
+    This function unfreezes the last layer of the transformer,
+    this is because slightly changing the representation of the last layer
+     after a few epochs of training can be very beneficial for the accuracy.
+    This is due to the fact that the representation in the last layer is the most task-specific.
+    """
+    third_last = model.base_model.layers[-3]
+    for p in third_last.parameters():
+        p.requires_grad = True
+
+    second_last = model.base_model.layers[-2]
+    for p in second_last.parameters():
+        p.requires_grad = True
+
+    last_block = model.base_model.layers[-1]
+    for p in last_block.parameters():
+        p.requires_grad = True
+
+    for p in model.base_model.final_layer_norm.parameters():
+        p.requires_grad = True
+
+    print(f"Unfroze last transformer layer.")
 
 model_name = "/model/snapshots/e498922d792f3fd7c07471a498ad0a79e0f0b0a0"  # now I am using a local version of the model
 tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
@@ -257,7 +313,7 @@ class MultiTaskTransformer(nn.Module):
 
 
 """ 
-This is the actual initialization of the model, we specify 21 classes, since we have 20 players that the network must classify.
+This is the actual initialization of the model, we specify 20 classes, since we have 20 players that the network must classify.
 Then we have 2 regression values, because the model should also predict the elo of both players (white and black)
 """
 model = MultiTaskTransformer(
@@ -267,20 +323,15 @@ model = MultiTaskTransformer(
     shared_dim1=512,
     shared_dim2=256,
     head_dim=128,
-    dropout=0.1
+    dropout=0.0
 )
-
-# model.load_state_dict(torch.load("best_model.pth")) <- this let us restart training from the last best model (not always a good idea)
 
 for p in model.base_model.parameters():
     p.requires_grad = False
-for name, p in model.named_parameters():
-    if "shared" in name or "classifier" in name or "regressor" in name:
-        p.requires_grad = True
 
-train_dataset = ChessDataset_transformer(X_train, y_train, elos_train, tokenizer, max_length=128)
-val_dataset = ChessDataset_transformer(X_val, y_val, elos_val, tokenizer, max_length=128)
-test_dataset = ChessDataset_transformer(X_test, y_test, elos_test, tokenizer, max_length=128)
+train_dataset = ChessDataset_transformer(X_train, y_train, elos_train, tokenizer, max_length=256)
+val_dataset = ChessDataset_transformer(X_val, y_val, elos_val, tokenizer, max_length=256)
+test_dataset = ChessDataset_transformer(X_test, y_test, elos_test, tokenizer, max_length=256)
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -288,13 +339,33 @@ test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 print(len(train_loader))
 
-optimizer = AdamW(model.parameters(), lr=3e-4, weight_decay=0.01)
-scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=8,
-                          num_training_steps=187)  # those steps have been calculated based on the number of data, batch size, accumulator size and n. epochs
+unfreeze_last_layers(model)
+
+trainable_params = [p for p in model.parameters() if p.requires_grad]
+
+head_params = []
+backbone_params = []
+for name, p in model.named_parameters():
+    if p.requires_grad:
+        if name.startswith("shared") or name.startswith("classifier") or name.startswith("regressor"):
+            head_params.append(p)
+        else:
+            backbone_params.append(p)
+
+optimizer = torch.optim.AdamW([
+    {"params": head_params, "lr": 5e-4, "weight_decay": 0.00001},  # heads: faster LR
+    {"params": backbone_params, "lr": 1e-4, "weight_decay": 0.00001},  # unfrozen GPT-NeoX blocks: smaller LR
+])
+
+scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=8, num_training_steps=2500)  # those steps have been calculated based on the number of data, batch size, accumulator size and n. epochs
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 model.to(device)
+
+print(f"-------LOADING MODEL--------------")
+model.load_state_dict(torch.load("best_model.pth")) # <- this let us restart training from the last best model (not always a good idea)
+print(f"-------LOADING MODEL DONE---------")
 
 
 def train_validate(train_loader: DataLoader,
@@ -303,7 +374,7 @@ def train_validate(train_loader: DataLoader,
                    optimizer,
                    scheduler,
                    device: torch.device,
-                   alpha=0.001,
+                   alpha=0.2,
                    accumulation_step=32):
     scaler = GradScaler()
 
@@ -329,8 +400,8 @@ def train_validate(train_loader: DataLoader,
             class_logits = outputs["classification"]
             class_regr = outputs["regression"]
 
-        class_regr = torch.nan_to_num(class_regr, nan=0.5, posinf=1, neginf=0)
-        reg_labels = torch.nan_to_num(reg_labels, nan=0.5, posinf=1, neginf=0)
+        class_regr = torch.nan_to_num(class_regr, nan=0.0, posinf=3, neginf=-15)
+        reg_labels = torch.nan_to_num(reg_labels, nan=0.0, posinf=3, neginf=-15)
 
         ce_loss = torch.nn.functional.cross_entropy(class_logits.float(), class_labels)
         huber_loss = torch.nn.functional.smooth_l1_loss(class_regr.float(), reg_labels.float(), beta=1.0)
@@ -363,7 +434,7 @@ def train_validate(train_loader: DataLoader,
             print("Optimizer param groups:", sum(p.requires_grad for g in optimizer.param_groups for p in g['params']))
             print("LRs after scheduler:", [g['lr'] for g in optimizer.param_groups])
 
-        batch_losses_train.append(loss.item())
+        batch_losses_train.append(loss.item() * accumulation_step)
 
         preds = torch.argmax(class_logits, dim=1)
 
@@ -375,8 +446,8 @@ def train_validate(train_loader: DataLoader,
     # Format useful lists for calculation of metrics
     pred_labels_train = torch.cat(pred_labels_train, dim=0).detach().cpu().numpy().flatten()
     true_labels_train = torch.cat(true_labels_train, dim=0).detach().cpu().numpy().flatten()
-    pred_regression_train = torch.cat(pred_regression_train, dim=0).cpu().detach().numpy().flatten()
-    true_regression_train = torch.cat(true_regression_train, dim=0).cpu().detach().numpy().flatten()
+    pred_regression_train = torch.cat(pred_regression_train, dim=0).cpu().detach().to(torch.float32).numpy().flatten()
+    true_regression_train = torch.cat(true_regression_train, dim=0).cpu().detach().to(torch.float32).numpy().flatten()
 
     avg_train_loss = np.mean(batch_losses_train)
 
@@ -403,8 +474,8 @@ def train_validate(train_loader: DataLoader,
                 class_logits = outputs["classification"]
                 class_regr = outputs["regression"]
 
-            class_regr = torch.nan_to_num(class_regr, nan=0.5, posinf=1, neginf=0)
-            reg_labels = torch.nan_to_num(reg_labels, nan=0.5, posinf=1, neginf=0)
+            class_regr = torch.nan_to_num(class_regr, nan=0.0, posinf=3, neginf=-15)
+            reg_labels = torch.nan_to_num(reg_labels, nan=0.0, posinf=3, neginf=-15)
 
             ce_loss = torch.nn.functional.cross_entropy(class_logits.float(), class_labels)
             huber_loss = torch.nn.functional.smooth_l1_loss(class_regr.float(), reg_labels.float(), beta=1.0)
@@ -437,7 +508,7 @@ def train_validate(train_loader: DataLoader,
 def test(test_loader: DataLoader,
          model: nn.Module,
          device: torch.device,
-         alpha=0.001):
+         alpha=0.2):
     model.eval()
 
     batch_losses_test = []
@@ -458,8 +529,8 @@ def test(test_loader: DataLoader,
             class_logits = outputs["classification"]
             class_regr = outputs["regression"]
 
-        class_regr = torch.nan_to_num(class_regr, nan=0.5, posinf=1, neginf=0)
-        reg_labels = torch.nan_to_num(reg_labels, nan=0.5, posinf=1, neginf=0)
+        class_regr = torch.nan_to_num(class_regr, nan=0.0, posinf=3, neginf=-15)
+        reg_labels = torch.nan_to_num(reg_labels, nan=0.0, posinf=3, neginf=-15)
 
         ce_loss = torch.nn.functional.cross_entropy(class_logits.float(), class_labels)
         huber_loss = torch.nn.functional.smooth_l1_loss(class_regr.float(), reg_labels.float(), beta=1.0)
@@ -486,32 +557,33 @@ def test(test_loader: DataLoader,
     return avg_test_loss, (pred_labels_test, true_labels_test), (pred_regression_test, true_regression_test)
 
 
-def unfreeze_last_layer(model):
-    """
-    This function unfreezes the last layer of the transformer,
-    this is because slightly changing the representation of the last layer
-     after a few epochs of training can be very beneficial for the accuracy.
-    This is due to the fact that the representation in the last layer is the most task-specific.
-    """
-    last_block = model.base_model.layers[-1]
-    for p in last_block.parameters():
-        p.requires_grad = True
 
-    for p in model.base_model.final_layer_norm.parameters():
-        p.requires_grad = True
-
-    print(f"Unfroze last transformer layer.")
+def to_serializable(obj):
+    """
+    Recursively convert NumPy arrays / Tensors inside lists/dicts to JSON-serializable types.
+    """
+    if isinstance(obj, np.ndarray):
+        if obj.dtype == object:
+            return [to_serializable(x) for x in obj.tolist()]
+        return obj.tolist()
+    if isinstance(obj, torch.Tensor):
+        return obj.detach().cpu().float().tolist()
+    if isinstance(obj, (list, tuple)):
+        return [to_serializable(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: to_serializable(v) for k, v in obj.items()}
+    return obj
 
 
 """
-Here we have the training loop, where we finetune the added multitask-MLP for 4 epochs,
- to then unfreeze the last layer of the transformer, and continue with the other 6 epochs.
-We have a dataset of almost 400000 chess games, which are slow to feed to such a big model, therefore we had to settle for this.
+Here we have the training loop, where we train the added multitask-MLP and the last 2 layers of the pretrained transformer.
+We have a dataset of almost 140000 chess games, which are slow to feed to such a big model, therefore we had to settle for only 15 epochs,
+but already with this we see the model settle around some metrics.
 
-After the training is done we save the weights of the best performing model (on the validation set) and we test it on the test set.
+After the training is done we save the weights of the best performing model (on the validation set) and we test it on the test set (10% of the games).
 
 The train_validate and test functions return all the useful information regarding the performance of the model,
- that can be processed and visualized in a second moment.
+ that are saved in a json file each epoch, so we can process and visualize them in a second moment.
 """
 
 epochs_non_improved = 0
@@ -530,7 +602,7 @@ metrics_dict = {
     "true_regression_val": [],
 }
 
-for epoch in range(10):
+for epoch in range(15):
     avg_train_loss, avg_val_loss, \
         (pred_labels_train, true_labels_train), \
         (pred_labels_val, true_labels_val), \
@@ -549,52 +621,25 @@ for epoch in range(10):
     metrics_dict["pred_regression_val"].append(pred_regression_val)
     metrics_dict["true_regression_val"].append(true_regression_val)
 
-    with open("metrics.json", "w") as f:
-        json.dump(metrics_dict, f)
+    with open(f"./metrics/metrics_epoch_{epoch}.json", "w") as f:
+        json.dump(to_serializable(metrics_dict), f, indent=2)
 
     print(f"avg_train_loss {avg_train_loss}")
     print(f"avg_val_loss {avg_val_loss}")
-    if epochs_non_improved == 2:
-        print(f"Epoch {epoch + 1}\n-----------------------------------------------")
-        # print(f"Train Loss: {avg_train_loss:>7f}\tTrain Accuracy: {(100 * train_accuracy):>0.1f}%")
-        # print(f"Validation Loss: {avg_val_loss:>7f}\tValidation Accuracy: {(100 * avg_val_accuracy):>0.1f}%")
-        print(f"------------------------------------------------------------")
-        break
-    elif best_val_loss > avg_val_loss:
+
+    if best_val_loss > avg_val_loss:
         epochs_non_improved = 0
         best_loss = avg_val_loss
         torch.save(model.state_dict(), "best_model.pth")
     else:
         # print(f"NOT improved {epochs_non_improved} epochs")
         epochs_non_improved += 1
+        if epochs_non_improved == 2:
+            break
 
-    if epoch == 4:
-        unfreeze_last_layer(model)
+model.load_state_dict(torch.load(r"./best_models/best_model.pth"))  # I load the model that performed better on validation to test it
 
-        trainable_params = [p for p in model.parameters() if p.requires_grad]
-
-        head_params = []
-        backbone_params = []
-        for name, p in model.named_parameters():
-            if p.requires_grad:
-                if name.startswith("shared") or name.startswith("classifier") or name.startswith("regressor"):
-                    head_params.append(p)
-                else:
-                    backbone_params.append(p)
-
-        optimizer = torch.optim.AdamW([
-            {"params": head_params, "lr": 1e-4, "weight_decay": 0.01},  # heads: faster LR
-            {"params": backbone_params, "lr": 2e-5, "weight_decay": 0.01},  # unfrozen GPT-NeoX blocks: smaller LR
-        ])
-
-        scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=3,
-                                  num_training_steps=250)  # again as above, calculated by me
-
-model.load_state_dict(torch.load("best_model.pth"))  # I load the model that performed better on validation
-
-avg_test_loss, (pred_labels_test, true_labels_test), (pred_regression_test, true_regression_test) = test(test_loader,
-                                                                                                         model,
-                                                                                                         device)  # I test only the best model
+avg_test_loss, (pred_labels_test, true_labels_test), (pred_regression_test, true_regression_test) = test(test_loader,model,device)  # I test only the best model
 
 test_metrics_dict = {
     "avg_test_loss": avg_test_loss,
@@ -604,7 +649,6 @@ test_metrics_dict = {
     "true_regression_test": true_regression_test,
 }
 
-with open("test_metrics.json", "w") as f:
-    json.dump(test_metrics_dict, f)
 
-
+with open(r"./metrics/test_metrics.json", "w") as f:
+    json.dump(to_serializable(test_metrics_dict), f, indent=2)

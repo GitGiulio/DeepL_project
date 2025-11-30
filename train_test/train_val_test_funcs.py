@@ -1,3 +1,5 @@
+import json
+
 import torch
 import transformers
 from transformers import AutoTokenizer, AutoModel
@@ -326,7 +328,7 @@ Shows:
     - Predicted vs True regression plot
 '''
 def calculateMetrics(avg_loss : np.ndarray, predicted_labels : np.ndarray, true_labels : np.ndarray, 
-                     predicted_regression : np.ndarray, true_regression : np.ndarray):
+                     predicted_regression : np.ndarray, true_regression : np.ndarray,set:str,epoch:int):
     # --- CLASSIFICATION ---
     '''
     Macro F1 = The average f1 score over all classes, treating each class equally.
@@ -369,8 +371,8 @@ def calculateMetrics(avg_loss : np.ndarray, predicted_labels : np.ndarray, true_
     plt.figure(figsize=(6, 6))
     sns.heatmap(conf_matrix, annot=False, cmap="Blues")
     plt.title("Confusion matrix")
-    plt.show()
-    
+    plt.savefig(f"../data/plots_chessGPT/first_good/confusion_matrix_{set}_{epoch}.png")
+    plt.close()
     # --- REGRESSION METRICS ---
     '''
     The basic error functions for regression model outputs
@@ -396,4 +398,56 @@ def calculateMetrics(avg_loss : np.ndarray, predicted_labels : np.ndarray, true_
     plt.xlabel("True values")
     plt.ylabel("Predicted values")
     plt.title("Regression: Predicted vs True")
-    plt.show()
+    plt.savefig(f"../data/plots_chessGPT/first_good/regression_{set}_{epoch}.png")
+    plt.close()
+
+with open(r"../data/T_first_good_metrics.json", "r") as f:
+    data = json.load(f)
+
+avg_train_loss = np.array(data["avg_train_loss"])
+avg_val_loss = np.array(data["avg_val_loss"])
+
+pred_labels_train = []
+for epoch in data["pred_labels_train"]:
+    pred_labels_train.append(np.array(epoch))
+pred_labels_train = np.array(pred_labels_train)
+
+true_labels_train = []
+for epoch in data["true_labels_train"]:
+    true_labels_train.append(np.array(epoch))
+true_labels_train = np.array(true_labels_train)
+
+pred_labels_val = []
+for epoch in data["pred_labels_val"]:
+    pred_labels_val.append(np.array(epoch))
+pred_labels_val = np.array(pred_labels_val)
+
+true_labels_val = []
+for epoch in data["true_labels_val"]:
+    true_labels_val.append(np.array(epoch))
+true_labels_val = np.array(true_labels_val)
+
+pred_regression_train = []
+for epoch in data["pred_regression_train"]:
+    pred_regression_train.append(np.array(epoch))
+pred_regression_train = np.array(pred_regression_train)
+
+true_regression_train = []
+for epoch in data["true_regression_train"]:
+    true_regression_train.append(np.array(epoch))
+true_regression_train = np.array(true_regression_train)
+
+pred_regression_val = []
+for epoch in data["pred_regression_val"]:
+    pred_regression_val.append(np.array(epoch))
+pred_regression_val = np.array(pred_regression_val)
+
+true_regression_val = []
+for epoch in data["true_regression_val"]:
+    true_regression_val.append(np.array(epoch))
+true_regression_val = np.array(true_regression_val)
+
+for i in range(8):
+    calculateMetrics(avg_train_loss[i],pred_labels_train[i],true_labels_train[i],pred_regression_train[i],true_regression_train[i],"train",i)
+    print(f"EVAL epoch {i+1}")
+    calculateMetrics(avg_val_loss[i],pred_labels_val[i],true_labels_val[i],pred_regression_val[i],true_regression_val[i],"val",i)

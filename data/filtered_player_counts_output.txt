@@ -98,7 +98,7 @@ Vnebo                                9436
 Leviathan64                          9377
 Mavi_Alpha                           9364
 VonSinnen                            9258
-Nakamura, Hikaru                     9241
+Nakamura, Hikaru                     9241 GM
 SpiderMoves                          9191
 econpower                            9137
 Napo18                               9063
@@ -130,7 +130,7 @@ aaryan_varshney                      8178
 Zayats71                             8130
 EmanBot                              8125
 DenQ                                 8033
-Carlsen, Magnus                      8020
+Carlsen, Magnus                      8020 GM
 evg85                                7949
 sutcunuri                            7943
 Yiyi1984                             7936
