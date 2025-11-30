@@ -16,10 +16,10 @@ from io import BytesIO
 import itertools
 
 from sklearn.metrics import f1_score, confusion_matrix, balanced_accuracy_score, classification_report, mean_absolute_error, mean_squared_error, r2_score
-import seaborn as sns
-import matplotlib.pyplot as plt
+# import seaborn as sns
+# import matplotlib.pyplot as plt
 import pandas as pd
-from tabulate import tabulate
+# from tabulate import tabulate
 
 # for logging
 import mlflow
@@ -42,9 +42,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device {device}")
 
 # import games in csv
-#csv_path = "/content/drive/MyDrive/filtered_games_20_players.csv"
-csv_path = "SETPATHHERE"  # with the player specified below
-csv_path = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\data\\filtered_games.csv"
+csv_path = "\\teamspace\\studios\\this_studio\\DeepL_project\\data\\filtered_games_20_players.csv"
 
 # Data loading
 print("Loading data...")
@@ -375,7 +373,7 @@ Shows:
     - Confusion matrix
     - Predicted vs True regression plot
 '''
-def calculateMetrics(avg_loss : np.ndarray, predicted_labels : np.ndarray, true_labels : np.ndarray):
+def calculateMetrics(avg_loss : np.floating, predicted_labels : np.ndarray, true_labels : np.ndarray):
     # --- CLASSIFICATION ---
     '''
     Macro F1 = The average f1 score over all classes, treating each class equally.
@@ -408,17 +406,19 @@ def calculateMetrics(avg_loss : np.ndarray, predicted_labels : np.ndarray, true_
     print(
         f"--- CLASSIFICATION METRICS --- \n"
         f"F1 scores: [Macro={macro_f1:.3f}, Weighted={weighted_f1:.3f}] \n"
-        f"Balanced Accuracy = {bal_accuracy:.3f}"
+        f"Balanced Accuracy = {bal_accuracy:.3f}\n"
         f"Average loss = {avg_loss:.5f}")
 
     report = classification_report(true_labels, predicted_labels, output_dict=True)
-    df = pd.DataFrame(report).transpose()
-    print(tabulate(df.round(3), headers='keys', tablefmt="pretty"))
+    # df = pd.DataFrame(report).transpose()
+    # print(tabulate(df.round(3), headers='keys', tablefmt="pretty"))
+    print(report)
 
-    plt.figure(figsize=(6, 6))
-    sns.heatmap(conf_matrix, annot=False, cmap="Blues")
-    plt.title("Confusion matrix")
-    plt.show()
+    # Don't show plots for now...
+    # plt.figure(figsize=(6, 6))
+    # sns.heatmap(conf_matrix, annot=False, cmap="Blues")
+    # plt.title("Confusion matrix")
+    # plt.show()
     
     return macro_f1, weighted_f1, bal_accuracy
 
@@ -441,7 +441,7 @@ def runGridPoint(gridSearchArray : list, id : int):
     EPOCHS = 10
     
     with mlflow.start_run(run_id=id):
-        print("Starting new run...")
+        print(f"Starting new run {id}...")
         TRAIN_DATALOADER = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
         VALIDATION_DATALOADER = DataLoader(validation_data, batch_size=BATCH_SIZE)
         TEST_DATALOADER = DataLoader(test_data, batch_size=BATCH_SIZE)
@@ -497,6 +497,8 @@ def runGridPoint(gridSearchArray : list, id : int):
             mlflow.log_metric('val/weighted_f1', v_weighted_f1, step=iEpoch)
             mlflow.log_metric('val/balanced_acc', v_balanced_acc, step=iEpoch)
             
+            early_stop_best_model_state = model.state_dict()
+
             # -- EARLY STOPPING CHECK --
             if v_loss < early_stop_best_loss - DELTA:
                 # A better loss was found, so reset counter and save model state
