@@ -1,52 +1,53 @@
 # import all libraries
 import numpy as np
-import sklearn.model_selection
+# import sklearn.model_selection
 from sklearn.model_selection import train_test_split
-import os
+# import os
 from tqdm import tqdm
-from PIL import Image
+# from PIL import Image
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, Subset, random_split
-import torch.optim as optim
-import torchvision.transforms as transforms
+# import torch.optim as optim
+# import torchvision.transforms as transforms
 from collections import Counter
-from pathlib import Path
-from io import BytesIO
+# from pathlib import Path
+# from io import BytesIO
 import itertools
-
 from sklearn.metrics import f1_score, confusion_matrix, balanced_accuracy_score, classification_report, mean_absolute_error, mean_squared_error, r2_score
 # import seaborn as sns
 # import matplotlib.pyplot as plt
 import pandas as pd
 # from tabulate import tabulate
-
+from pathlib import Path
 # for logging
 import mlflow
-
 # Run MLFlow locally on port 5000, set IP address here:
 mlflow.set_tracking_uri(
-    "http://192.168.0.149:5000"
+    "http://youdontgetmyip:5000"
 )
 
+# maybe make experiment first
 mlflow.set_experiment("RNN_DL_Project")
 
 print("TRACKING URI:", mlflow.get_tracking_uri())
 
-exp = mlflow.get_experiment_by_name("RNN_DL_Project")
-print("EXPERIMENT:", exp)
-print("ARTIFACT LOCATION:", exp.artifact_location)
+# exp = mlflow.get_experiment_by_name("RNN_DL_Project")
+# print("EXPERIMENT:", exp)
+# print("ARTIFACT LOCATION:", exp.artifact_location)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print(f"Using device {device}")
 
 # import games in csv
-csv_path = "\\teamspace\\studios\\this_studio\\DeepL_project\\data\\filtered_games_20_players.csv"
+# csv_path = "DeepL_project\\data\\filtered_games_20_players.csv"
+project_root = Path(__file__).resolve().parents[1] 
+data_path = project_root / "data" / "filtered_games_20_players.csv"
 
 # Data loading
 print("Loading data...")
-data = pd.read_csv(csv_path) # loading into dataframe
+data = pd.read_csv(data_path) # loading into dataframe
 
 print("Data loaded...")
 #Added first move indicating to predict either white or black
@@ -410,9 +411,9 @@ def calculateMetrics(avg_loss : np.floating, predicted_labels : np.ndarray, true
         f"Average loss = {avg_loss:.5f}")
 
     report = classification_report(true_labels, predicted_labels, output_dict=True)
-    # df = pd.DataFrame(report).transpose()
+    df = pd.DataFrame(report).transpose()
     # print(tabulate(df.round(3), headers='keys', tablefmt="pretty"))
-    print(report)
+    print(df.round(3))
 
     # Don't show plots for now...
     # plt.figure(figsize=(6, 6))
@@ -434,13 +435,22 @@ def runGridPoint(gridSearchArray : list, id : int):
     DROPOUT = float(gridSearchArray[1])
     HIDDEN_LAYER_DIM = gridSearchArray[2]
     LSTM_LAYERS = int(gridSearchArray[3])
-    LEARNING_RATE = float(gridSearchArray[4])
+    
+    LEARNING_RATE = 0.01
+
+    if BATCH_SIZE == 512:
+        LEARNING_RATE = 0.05    
+    elif BATCH_SIZE == 64:
+        LEARNING_RATE = 0.001
+    elif BATCH_SIZE == 8:
+        LEARNING_RATE = 0.0005
 
     # Unaffected by grid search
     EMBEDDED_LAYER_DIM = 128
     EPOCHS = 10
     
-    with mlflow.start_run(run_id=id):
+    r_name = f"RUN 000{str(id)}"
+    with mlflow.start_run(run_name=r_name):
         print(f"Starting new run {id}...")
         TRAIN_DATALOADER = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
         VALIDATION_DATALOADER = DataLoader(validation_data, batch_size=BATCH_SIZE)
@@ -469,8 +479,8 @@ def runGridPoint(gridSearchArray : list, id : int):
         early_stop_counter = 0  # do not change
         early_stop_best_loss = torch.inf
         early_stop_best_model_state = None
-        PATIENCE = 5  # after how many epochs of no decrease in loss should we stop
-        DELTA = 1e-3  # if the loss decreases with maximum this delta, do not reset the counter
+        PATIENCE = 3  # after how many epochs of no decrease in loss should we stop
+        DELTA = 0.05  # if the loss decreases with maximum this delta, do not reset the counter
 
         print(f"Beginning training... using {device} device")
         for iEpoch in range(EPOCHS):
@@ -557,11 +567,10 @@ Hyperparameter specific notes:
 
 # These will have huge gaps, to see where the most potential lies.
 initial_grid_search_parameters = {
-    'batch_size': [4, 32, 128, 256],
-    'dropout': [0, 0.2, 0.5],
+    'batch_size': [256, 64, 8],
+    'dropout': [0.8, 0.5, 0.2],
     'hidden_layer_dim': [32, 128, 512],
-    'lstm_layers': [2, 5],
-    'learning_rate': [0.0001, 0.05]
+    'lstm_layers': [1, 2],
 }
 
 def return_combinations(dict_hyperparameters):
@@ -570,5 +579,15 @@ def return_combinations(dict_hyperparameters):
 
     return list(itertools.product(*all_parameters))
 
-for i, comb in return_combinations(initial_grid_search_parameters):
-    runGridPoint(comb, id=10000+i)
+
+# runGridPoint([512, 0.5, 128, 5, 0.01], 2)
+# runGridPoint([512, 0.5, 512, 2, 0.01], 3)
+# runGridPoint([512, 0.2, 128, 5, 0.01], 4)
+# runGridPoint([64, 0.5, 128, 2, 0.001], 5)
+# runGridPoint([64, 0.2, 128, 2, 0.001], 6)
+
+print(len(return_combinations(initial_grid_search_parameters)))
+
+
+for i, comb in enumerate(return_combinations(initial_grid_search_parameters)):
+    runGridPoint(comb, id=i)
