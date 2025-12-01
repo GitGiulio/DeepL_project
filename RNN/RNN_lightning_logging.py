@@ -22,21 +22,26 @@ import pandas as pd
 from pathlib import Path
 # for logging
 import mlflow
-# Run MLFlow locally on port 5000, set IP address here:
-mlflow.set_tracking_uri(
-    "http://youdontgetmyip:5000"
-)
 
-# maybe make experiment first
-mlflow.set_experiment("RNN_DL_Project")
+USE_LOGGING = False
 
-print("TRACKING URI:", mlflow.get_tracking_uri())
+if USE_LOGGING:
+    # Run MLFlow locally on port 5000, set IP address here:
+    mlflow.set_tracking_uri(
+        "http://youdontgetmyip:5000"
+    )
 
-# exp = mlflow.get_experiment_by_name("RNN_DL_Project")
-# print("EXPERIMENT:", exp)
-# print("ARTIFACT LOCATION:", exp.artifact_location)
+    # maybe make experiment first, before calling this.
+    mlflow.set_experiment("RNN_DL_Project")
+
+    print("TRACKING URI:", mlflow.get_tracking_uri())
+
+    # exp = mlflow.get_experiment_by_name("RNN_DL_Project")
+    # print("EXPERIMENT:", exp)
+    # print("ARTIFACT LOCATION:", exp.artifact_location)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 print(f"Using device {device}")
 
@@ -196,6 +201,8 @@ print("Data subsets created...")
 loss_fn = nn.CrossEntropyLoss()
 
 # --- THE RNN MODEL ---
+# https://drlee.io/revolutionizing-time-series-prediction-with-lstm-with-the-attention-mechanism-090833a19af9
+# Applying attention to LSTM outputs
 class RecurrentNN(nn.Module):
     def __init__(self, dir, dropout, lstm_layers, dim_embedded, dim_hidden_layer, dim_out):
         super(RecurrentNN, self).__init__() # initilaze pytorch nn.module
@@ -207,39 +214,47 @@ class RecurrentNN(nn.Module):
             padding_idx=2  # telling torch 0's are padding, not actual moves
         )
 
-        # Core
-        self.core = nn.LSTM( # lstm core
-            input_size=dim_embedded, # use embedding vector
-            # hidden dimension
+        # LSTM block
+        self.lstm = nn.LSTM(
+            input_size=dim_embedded, 
             hidden_size=dim_hidden_layer,
-            # 2 layers for a bit better results
             num_layers=lstm_layers,
             batch_first=True,
             bidirectional=True, # backward and forward
-            dropout=dropout # minimizing overfitting (drop 25% units randomly)
-            # For 2 layers it is ignored but for layers >= 3 (for later) it is good to have
+            dropout=dropout 
         )
 
         # projection block outputting
         self.proj = nn.Sequential( # classifier part
-            nn.Linear(2*dim_hidden_layer, 2*dim_hidden_layer),
+            nn.Linear(dim_hidden_layer, dim_hidden_layer),
             nn.ReLU(),
             nn.Dropout(dropout), # same like before (being less dependent on single neurons)
-            nn.Linear(2 * dim_hidden_layer, dim_out) # since bidirectional
+            nn.Linear(dim_hidden_layer, dim_out)
         )
+        
+        self.attention = nn.Linear(dim_hidden_layer, 1)
 
-    def forward(self, x): # input flow
-        x = self.table(x) # embedding tokens
-        _,(state,_) = self.core(x) # running sequence
+    # def forward(self, x): # input flow
+    #     x = self.table(x) # embedding tokens
+    #     _,(state,_) = self.lstm(x) # running sequence
 
-        # now we have the Last backward and forward states (hidden)
-        fowardstate  = state[-2] # for 2 layers
-        backwardstate = state[-1]
+    #     # now we have the Last backward and forward states (hidden)
+    #     fowardstate  = state[-2] # for 2 layers
+    #     backwardstate = state[-1]
 
-        # here we have a single vector concatenation
-        vector = torch.cat([fowardstate, backwardstate], dim=1)
+    #     # here we have a single vector concatenation
+    #     vector = torch.cat([fowardstate, backwardstate], dim=1)
 
-        return self.proj(vector)
+    #     return self.proj(vector)
+
+    def forward(self, x):
+        x = self.table(x)
+        lstm_out, _ = self.lstm(x)
+        
+        attention_weights = torch.softmax(self.attention(lstm_out).squeeze(-1), dim=1)
+        context_vector = torch.sum(lstm_out * attention_weights.unsqueeze(-1), dim=1)
+        
+        return self.proj(context_vector)
 
 # For RNN's, ADAM is the way to go.
 def train_validate(train_loader: DataLoader,
@@ -449,18 +464,100 @@ def runGridPoint(gridSearchArray : list, id : int):
     EMBEDDED_LAYER_DIM = 128
     EPOCHS = 10
     
-    r_name = f"RUN 000{str(id)}"
-    with mlflow.start_run(run_name=r_name):
-        print(f"Starting new run {id}...")
+    if USE_LOGGING:
+        r_name = f"RUN 000{str(id)}"
+        with mlflow.start_run(run_name=r_name):
+            print(f"Starting new run {id}...")
+            TRAIN_DATALOADER = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
+            VALIDATION_DATALOADER = DataLoader(validation_data, batch_size=BATCH_SIZE)
+            TEST_DATALOADER = DataLoader(test_data, batch_size=BATCH_SIZE)
+
+            mlflow.log_param('batch_size', BATCH_SIZE)
+            mlflow.log_param('dropout', DROPOUT)
+            mlflow.log_param('hidden_layer_dim', HIDDEN_LAYER_DIM)
+            mlflow.log_param('lstm_layers', LSTM_LAYERS)
+            mlflow.log_param('learning_rate', LEARNING_RATE)
+
+            model = RecurrentNN( # Building model
+                dir=len(dir),
+                dropout=DROPOUT,
+                lstm_layers=LSTM_LAYERS,
+                dim_embedded=EMBEDDED_LAYER_DIM,
+                dim_hidden_layer=HIDDEN_LAYER_DIM,
+                dim_out=len(encodep)).to(device)
+            
+            optimizer = torch.optim.Adam(params=list(model.parameters()), lr=LEARNING_RATE)
+                
+            # --- TRAINING, VALIDATION ---
+            train_losses, val_losses = [], []
+
+            # EARLY STOPPING
+            early_stop_counter = 0  # do not change
+            early_stop_best_loss = torch.inf
+            early_stop_best_model_state = None
+            PATIENCE = 3  # after how many epochs of no decrease in loss should we stop
+            DELTA = 0.05  # if the loss decreases with maximum this delta, do not reset the counter
+
+            print(f"Beginning training... using {device} device")
+            for iEpoch in range(EPOCHS):
+                t_loss, v_loss, (pltrain, tltrain), (plval, tlval)\
+                = train_validate(train_loader=TRAIN_DATALOADER,
+                                validation_loader=VALIDATION_DATALOADER,
+                                model=model,
+                                optimizer=optimizer,
+                                scheduler=None,
+                                device=device)
+
+                print(f"Epoch {iEpoch}, training metrics:")
+                t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(t_loss, pltrain, tltrain)
+
+                print(f"Epoch {iEpoch}, validation metrics:")
+                v_macro_f1, v_weighted_f1, v_balanced_acc = calculateMetrics(v_loss, plval, tlval)
+
+                mlflow.log_metric('train/loss', t_loss, step=iEpoch)
+                mlflow.log_metric('train/macro_f1', t_macro_f1, step=iEpoch)
+                mlflow.log_metric('train/weighted_f1', t_weighted_f1, step=iEpoch)
+                mlflow.log_metric('train/balanced_acc', t_balanced_acc, step=iEpoch)
+                mlflow.log_metric('val/loss', v_loss, step=iEpoch)
+                mlflow.log_metric('val/macro_f1', v_macro_f1, step=iEpoch)
+                mlflow.log_metric('val/weighted_f1', v_weighted_f1, step=iEpoch)
+                mlflow.log_metric('val/balanced_acc', v_balanced_acc, step=iEpoch)
+                
+                early_stop_best_model_state = model.state_dict()
+
+                # -- EARLY STOPPING CHECK --
+                if v_loss < early_stop_best_loss - DELTA:
+                    # A better loss was found, so reset counter and save model state
+                    early_stop_best_loss = v_loss
+                    early_stop_counter = 0
+                    # Save the best model so we can restore it later and get the best model performance to use the test data for.
+                    early_stop_best_model_state = model.state_dict()
+                else:
+                    early_stop_counter += 1
+                    if early_stop_counter >= PATIENCE:
+                        print(f"Early stopping...")
+
+                        # Restore the best model which was saved earlier.
+                        model.load_state_dict(early_stop_best_model_state)
+                        break
+
+            # --- TESTING ---
+            avg_test_loss, (pred_labels_test, true_labels_test) = test(test_loader=TEST_DATALOADER,
+                                model=model,
+                                device=device)
+            print(f"Epoch {iEpoch}, testing metrics:")
+            t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(avg_test_loss, pred_labels_test, true_labels_test)
+            
+            mlflow.log_metric('test/loss', avg_test_loss)
+            mlflow.log_metric('test/macro_f1', t_macro_f1)
+            mlflow.log_metric('test/weighted_f1', t_weighted_f1)
+            mlflow.log_metric('test/balanced_acc', t_balanced_acc)
+            #mlflow.keras.log_model(model, 'rnn_model')
+    else:
+        print(f"Starting new run, NO LOGGING...")
         TRAIN_DATALOADER = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
         VALIDATION_DATALOADER = DataLoader(validation_data, batch_size=BATCH_SIZE)
         TEST_DATALOADER = DataLoader(test_data, batch_size=BATCH_SIZE)
-
-        mlflow.log_param('batch_size', BATCH_SIZE)
-        mlflow.log_param('dropout', DROPOUT)
-        mlflow.log_param('hidden_layer_dim', HIDDEN_LAYER_DIM)
-        mlflow.log_param('lstm_layers', LSTM_LAYERS)
-        mlflow.log_param('learning_rate', LEARNING_RATE)
 
         model = RecurrentNN( # Building model
             dir=len(dir),
@@ -497,15 +594,6 @@ def runGridPoint(gridSearchArray : list, id : int):
 
             print(f"Epoch {iEpoch}, validation metrics:")
             v_macro_f1, v_weighted_f1, v_balanced_acc = calculateMetrics(v_loss, plval, tlval)
-
-            mlflow.log_metric('train/loss', t_loss, step=iEpoch)
-            mlflow.log_metric('train/macro_f1', t_macro_f1, step=iEpoch)
-            mlflow.log_metric('train/weighted_f1', t_weighted_f1, step=iEpoch)
-            mlflow.log_metric('train/balanced_acc', t_balanced_acc, step=iEpoch)
-            mlflow.log_metric('val/loss', v_loss, step=iEpoch)
-            mlflow.log_metric('val/macro_f1', v_macro_f1, step=iEpoch)
-            mlflow.log_metric('val/weighted_f1', v_weighted_f1, step=iEpoch)
-            mlflow.log_metric('val/balanced_acc', v_balanced_acc, step=iEpoch)
             
             early_stop_best_model_state = model.state_dict()
 
@@ -531,12 +619,7 @@ def runGridPoint(gridSearchArray : list, id : int):
                             device=device)
         print(f"Epoch {iEpoch}, testing metrics:")
         t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(avg_test_loss, pred_labels_test, true_labels_test)
-        
-        mlflow.log_metric('test/loss', avg_test_loss)
-        mlflow.log_metric('test/macro_f1', t_macro_f1)
-        mlflow.log_metric('test/weighted_f1', t_weighted_f1)
-        mlflow.log_metric('test/balanced_acc', t_balanced_acc)
-        #mlflow.keras.log_model(model, 'rnn_model')
+
 
 '''
 This code thinks about how to implement grid search (for our RNN model), given the lecture
@@ -580,7 +663,7 @@ def return_combinations(dict_hyperparameters):
     return list(itertools.product(*all_parameters))
 
 
-# runGridPoint([512, 0.5, 128, 5, 0.01], 2)
+runGridPoint([128, 0.5, 128, 2, 0.001], id=2)
 # runGridPoint([512, 0.5, 512, 2, 0.01], 3)
 # runGridPoint([512, 0.2, 128, 5, 0.01], 4)
 # runGridPoint([64, 0.5, 128, 2, 0.001], 5)
@@ -589,5 +672,5 @@ def return_combinations(dict_hyperparameters):
 print(len(return_combinations(initial_grid_search_parameters)))
 
 
-for i, comb in enumerate(return_combinations(initial_grid_search_parameters)):
-    runGridPoint(comb, id=i)
+# for i, comb in enumerate(return_combinations(initial_grid_search_parameters)):
+#     runGridPoint(comb, id=i)
