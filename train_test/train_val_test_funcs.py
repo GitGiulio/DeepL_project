@@ -371,7 +371,7 @@ def calculateMetrics(avg_loss : np.ndarray, predicted_labels : np.ndarray, true_
     plt.figure(figsize=(6, 6))
     sns.heatmap(conf_matrix, annot=False, cmap="Blues")
     plt.title("Confusion matrix")
-    plt.savefig(f"../data/plots_chessGPT/first_good/confusion_matrix_{set}_{epoch}.png")
+    plt.savefig(f"../data/plots_chessGPT/{directory}/confusion_matrix_{set}_{epoch}.png")
     plt.close()
     # --- REGRESSION METRICS ---
     '''
@@ -398,56 +398,41 @@ def calculateMetrics(avg_loss : np.ndarray, predicted_labels : np.ndarray, true_
     plt.xlabel("True values")
     plt.ylabel("Predicted values")
     plt.title("Regression: Predicted vs True")
-    plt.savefig(f"../data/plots_chessGPT/first_good/regression_{set}_{epoch}.png")
+    plt.savefig(f"../data/plots_chessGPT/{directory}/regression_{set}_{epoch}.png")
     plt.close()
 
-with open(r"../data/T_first_good_metrics.json", "r") as f:
-    data = json.load(f)
+directory = 'metrics4'
+mean_elo = 2663.78369140625
+std_elo = 110.49032592773438
 
-avg_train_loss = np.array(data["avg_train_loss"])
-avg_val_loss = np.array(data["avg_val_loss"])
+for i in range(5):
+    with open(f"../data/run_metrics_chessGPT/{directory}/metrics_epoch_{i}.json", "r") as f:
+        data = json.load(f)
 
-pred_labels_train = []
-for epoch in data["pred_labels_train"]:
-    pred_labels_train.append(np.array(epoch))
-pred_labels_train = np.array(pred_labels_train)
+    avg_train_loss = data["avg_train_loss"]
+    avg_val_loss = data["avg_val_loss"]
+    pred_labels_train = np.array(data["pred_labels_train"])
+    true_labels_train = np.array(data["true_labels_train"])
+    pred_labels_val = np.array(data["pred_labels_val"])
+    true_labels_val = np.array(data["true_labels_val"])
+    pred_regression_train = (np.array(data["pred_regression_train"]) * std_elo) + mean_elo
+    true_regression_train = (np.array(data["true_regression_train"]) * std_elo) + mean_elo
+    pred_regression_val = (np.array(data["pred_regression_val"]) * std_elo) + mean_elo
+    true_regression_val = (np.array(data["true_regression_val"]) * std_elo) + mean_elo
 
-true_labels_train = []
-for epoch in data["true_labels_train"]:
-    true_labels_train.append(np.array(epoch))
-true_labels_train = np.array(true_labels_train)
-
-pred_labels_val = []
-for epoch in data["pred_labels_val"]:
-    pred_labels_val.append(np.array(epoch))
-pred_labels_val = np.array(pred_labels_val)
-
-true_labels_val = []
-for epoch in data["true_labels_val"]:
-    true_labels_val.append(np.array(epoch))
-true_labels_val = np.array(true_labels_val)
-
-pred_regression_train = []
-for epoch in data["pred_regression_train"]:
-    pred_regression_train.append(np.array(epoch))
-pred_regression_train = np.array(pred_regression_train)
-
-true_regression_train = []
-for epoch in data["true_regression_train"]:
-    true_regression_train.append(np.array(epoch))
-true_regression_train = np.array(true_regression_train)
-
-pred_regression_val = []
-for epoch in data["pred_regression_val"]:
-    pred_regression_val.append(np.array(epoch))
-pred_regression_val = np.array(pred_regression_val)
-
-true_regression_val = []
-for epoch in data["true_regression_val"]:
-    true_regression_val.append(np.array(epoch))
-true_regression_val = np.array(true_regression_val)
-
-for i in range(8):
-    calculateMetrics(avg_train_loss[i],pred_labels_train[i],true_labels_train[i],pred_regression_train[i],true_regression_train[i],"train",i)
+    calculateMetrics(avg_train_loss,pred_labels_train,true_labels_train,pred_regression_train,true_regression_train,"train",i)
     print(f"EVAL epoch {i+1}")
-    calculateMetrics(avg_val_loss[i],pred_labels_val[i],true_labels_val[i],pred_regression_val[i],true_regression_val[i],"val",i)
+    calculateMetrics(avg_val_loss,pred_labels_val,true_labels_val,pred_regression_val,true_regression_val,"val",i)
+
+#print(f"----------TEST--METRICS--------")
+#
+#with open(f"../data/run_metrics_chessGPT/{directory}/test_metrics.json", "r") as f:
+#    data = json.load(f)
+#
+#avg_test_loss = data["avg_test_loss"]
+#pred_labels_test = np.array(data["pred_labels_test"])
+#true_labels_test = np.array(data["true_labels_test"])
+#pred_regression_test = (np.array(data["pred_regression_test"]) * std_elo) + mean_elo
+#true_regression_test = (np.array(data["true_regression_test"]) * std_elo) + mean_elo
+#
+#calculateMetrics(avg_test_loss,pred_labels_test,true_labels_test,pred_regression_test,true_regression_test,"test",0)
