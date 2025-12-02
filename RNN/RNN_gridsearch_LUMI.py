@@ -3,7 +3,7 @@ import numpy as np
 # import sklearn.model_selection
 from sklearn.model_selection import train_test_split
 # import os
-from tqdm import tqdm
+# from tqdm import tqdm
 # from PIL import Image
 import torch
 import torch.nn as nn
@@ -32,9 +32,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device {device}")
 
 # import games in csv
-data_path = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\data\\filtered_games_20_players.csv"
-project_root = "/teamspace/studios/this_studio/DeepL_project"
-data_path = project_root + "/data/filtered_games_20_players.csv"
+# data_path = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\data\\filtered_games_20_players.csv"
+# project_root = "/teamspace/studios/this_studio/DeepL_project"
+data_path = "/filtered_games_new.csv"
 
 # Data loading
 print("Loading data...")
@@ -45,8 +45,8 @@ print("Data loaded...")
 #White = 0
 #Black = 1
 
-data = data[:200]
-print("Only using the first 200 rows for this test")
+# data = data[:200]
+# print("Only using the first 200 rows for this test")
 
 # --- SETTINGS ---
 NEW_LIST_OF_PLAYERS_MANUAL = [
@@ -56,13 +56,11 @@ NEW_LIST_OF_PLAYERS_MANUAL = [
     'gefuehlter_FM','gmmitkov','positionaloldman',"Carlsen, Magnus","Nakamura, Hikaru"
 ]
 
-GAME_LENGTH = 200
-
 # --- DATA PREPARATION ---
 TRAIN_SPLIT = 0.8
 VALIDATION_SPLIT = 0.1
 TEST_SPLIT = 0.1
-GAME_LENGTH = 250
+GAME_LENGTH = 100
 
 # --- ENSURE STRINGS ---
 data["white_name"] = data["white_name"].astype(str)
@@ -251,7 +249,7 @@ def train_validate(train_loader: DataLoader,
     pred_labels_train = []
     true_labels_train = []
 
-    for xbatch, ybatch in tqdm(train_loader, colour='green'): # iterating batches
+    for xbatch, ybatch in train_loader: # iterating batches
         xbatch = xbatch.to(device)
         ybatch = ybatch.to(device)
 
@@ -439,27 +437,29 @@ Function used for the grid search algorithm, input = grid search array
 Initialization steps unaffected by the runGridPoint are NOT ran again. 
 Runs the whole RNN loop (from creating data loaders to training the model, with specified hyperparamaters)
 '''
-def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, epochs=3, logging=True):
+def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, epochs=3, logging=True, workerID='A'):
     # Affected by Grid Search
     BATCH_SIZE = int(grid_search_array[0])
     DROPOUT = float(grid_search_array[1])
     HIDDEN_LAYER_DIM = grid_search_array[2]
     LSTM_LAYERS = int(grid_search_array[3])
+    LEARNING_RATE = float(grid_search_array[4])
+    EMBEDDED_LAYER_DIM = int(grid_search_array[5])
     
-    LEARNING_RATE = 0.001
+    # LEARNING_RATE = 0.001
     USE_LOGGING = logging
 
     # Learning rate increases/decreases based on batch size
-    if BATCH_SIZE == 256:
-        LEARNING_RATE = 0.01    
-    elif BATCH_SIZE == 128:
-        LEARNING_RATE = 0.005
-    elif BATCH_SIZE == 64:
-        LEARNING_RATE = 0.001
+    # if BATCH_SIZE == 256:
+    #     LEARNING_RATE = 0.01    
+    # elif BATCH_SIZE == 128:
+    #     LEARNING_RATE = 0.005
+    # elif BATCH_SIZE == 64:
+    #     LEARNING_RATE = 0.001
 
     # Unaffected by grid search
-    EMBEDDED_LAYER_DIM = 128
     EPOCHS = epochs
+    
     # EARLY STOPPING
     early_stop_counter = 0  # do not change
     early_stop_best_loss = torch.inf
@@ -483,6 +483,7 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
             mlflow.log_param('hidden_layer_dim', HIDDEN_LAYER_DIM)
             mlflow.log_param('lstm_layers', LSTM_LAYERS)
             mlflow.log_param('learning_rate', LEARNING_RATE)
+            mlflow.log_param('embedding_dim', EMBEDDED_LAYER_DIM)
 
             model = RecurrentNN( # Building model
                 dir=len(dir),
@@ -529,13 +530,12 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
                     "true_labels_val": tlval,
                 }
                 
-                folder_path = f"{project_root}/metrics/run_{id:04d}"
+                folder_path = f"/metrics/run_{id:04d}_{workerID}"
                 os.makedirs(folder_path, exist_ok=True)
                 
-                with open(f"{project_root}/metrics/run_{id:04d}/epoch_{iEpoch}.json", "w") as f:
+                with open(f"/metrics/run_{id:04d}_{workerID}/epoch_{iEpoch}.json", "w") as f:
                     json.dump(to_serializable(metrics_dict), f, indent=2)
 
-                
                 early_stop_best_model_state = model.state_dict()
 
                 # -- EARLY STOPPING CHECK --
@@ -554,11 +554,14 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
                         model.load_state_dict(early_stop_best_model_state)
                         break
 
+            # torch.save(model.state_dict(), f"/best_models/RNN_best_model_run{id:04d}_{workerID}.pth")
+
             # --- TESTING ---
+
             avg_test_loss, (pred_labels_test, true_labels_test) = test(test_loader=TEST_DATALOADER,
                                 model=model,
                                 device=device)
-            print(f"Epoch {iEpoch}, testing metrics:")
+            print(f"Testing metrics:")
             t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(avg_test_loss, pred_labels_test, true_labels_test)
             
             test_metrics_dict = {
@@ -567,7 +570,7 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
                 "true_labels_test": true_labels_test,
             }
 
-            with open(f"{project_root}/metrics/run_{id:04d}/test_metrics.json", "w") as f:
+            with open(f"/metrics/run_{id:04d}_{workerID}/test_metrics.json", "w") as f:
                 json.dump(to_serializable(test_metrics_dict), f, indent=2)
 
             mlflow.log_metric('test/loss', avg_test_loss)
@@ -685,11 +688,35 @@ Hyperparameter specific notes:
 # Should we tokenize on a random 80% split, or should we tokenize within the fold?
 
 # These will have huge gaps, to see where the most potential lies.
+
+# A
+# initial_grid_search_parameters = {
+#     'batch_size': [32, 128, 256],
+#     'dropout': [0.1, 0.4],
+#     'hidden_layer_dim': [64],
+#     'lstm_layers': [2, 3],
+#     'learning_rate': [1e-4, 1e-3, 1e-2],
+#     'embedded_layer_dim': [64, 128],
+# }
+
+# B
+# initial_grid_search_parameters = {
+#     'batch_size': [32, 128, 256],
+#     'dropout': [0.1, 0.4],
+#     'hidden_layer_dim': [128],
+#     'lstm_layers': [2, 3],
+#     'learning_rate': [1e-4, 1e-3, 1e-2],
+#     'embedded_layer_dim': [64, 128],
+# }
+
+# C
 initial_grid_search_parameters = {
-    'batch_size': [32, 64, 128],
-    'dropout': [0, 0.2, 0.4],
-    'hidden_layer_dim': [64, 128, 256],
+    'batch_size': [32, 128, 256],
+    'dropout': [0.1, 0.4],
+    'hidden_layer_dim': [256],
     'lstm_layers': [2, 3],
+    'learning_rate': [1e-4, 1e-3, 1e-2],
+    'embedded_layer_dim': [64, 128],
 }
 
 # USED LATER
@@ -708,22 +735,16 @@ def return_combinations(dict_hyperparameters):
 
 # print(len(return_combinations(initial_grid_search_parameters)))
 
-USE_LOGGING = True
-if USE_LOGGING:
-    
-    # Run MLFlow locally on port 5000, set IP address here:
-    mlflow.set_tracking_uri(
-        "http://ip:5000"
-    )
+# Run MLFlow locally on port 5000, set IP address here:
+mlflow.set_tracking_uri(
+    "http://84.238.41.58:5000"
+)
 
-    # maybe make experiment first, before calling this.
-    mlflow.set_experiment("RNN_DL_Project")
-
-    print("TRACKING URI:", mlflow.get_tracking_uri())
-
-    # exp = mlflow.get_experiment_by_name("RNN_DL_Project")
-    # print("EXPERIMENT:", exp)
-    # print("ARTIFACT LOCATION:", exp.artifact_location)
+# mlflow.set_experiment("RNN_OvernightGridSearch_A")
+# mlflow.set_experiment("RNN_OvernightGridSearch_B")
+mlflow.set_experiment("RNN_OvernightGridSearch_C")
 
 for i, comb in enumerate(return_combinations(initial_grid_search_parameters)):
-    runGridPoint(comb, id=i, early_stop_patience=100, epochs=3, logging=True)
+    runGridPoint(comb, id=i, early_stop_patience=100, epochs=3, logging=True, workerID='C')
+
+# runGridPoint([64, 0.2, 64, 2, 1e-3, 64], id=3, early_stop_patience=10, epochs=2, logging=True, workerID='A')
