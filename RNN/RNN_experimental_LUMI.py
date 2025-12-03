@@ -187,7 +187,6 @@ for i in range(min(6, total_samples)):
 # Applying attention to LSTM outputs
 class RecurrentNN(nn.Module):
     def __init__(self, dir, dropout, lstm_layers, dim_embedded, dim_hidden_layer, dim_out):
-        print(dim_out)
         super(RecurrentNN, self).__init__()
 
         # lookup table for the tokens
@@ -220,13 +219,16 @@ class RecurrentNN(nn.Module):
         self.norm = nn.LayerNorm(2 * dim_hidden_layer)
 
     def forward(self, x):
-        # Batch size stays the same (B)
-        x = self.table(x)    # Embedding -> (B, Padded Sequence Length, Embedding Dimension)
-        lstm_out, _ = self.lstm(x)    # (B, Padded Sequence Length, 2 * hidden_size)
-        lstm_out = self.norm(lstm_out)   # same
+        x = self.table(x)
+        lstm_out, _ = self.lstm(x)
+        lstm_out = self.norm(lstm_out)
         
-        attention_weights = torch.softmax(self.attention(lstm_out).squeeze(-1), dim=1)  # (B, Padded Sequence Length)
-        context_vector = torch.sum(lstm_out * attention_weights.unsqueeze(-1), dim=1)  # (B, 2 * hidden_size)
+        attention_weights = torch.softmax(self.attention(lstm_out).squeeze(-1), dim=1)
+        context_vector = torch.sum(lstm_out * attention_weights.unsqueeze(-1), dim=1)
+
+        # Attempted, but not much difference
+        # context, _ = self.multiheadattention(lstm_out, lstm_out, lstm_out)
+        # context_vector = context.mean(dim=1)
 
         return self.FC(context_vector)
 
@@ -468,15 +470,15 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
     BATCH_SIZE = int(grid_search_array[0])
     # DROPOUT = float(grid_search_array[1])   # Was only used for initial grid search; will be decided upon during final testing.
     HIDDEN_LAYER_DIM = grid_search_array[1]
-    #LSTM_LAYERS = int(grid_search_array[3])  # Was only used for initial grid search, always 2 now to reduce complexity and prevent overfitting
+    LSTM_LAYERS = int(grid_search_array[3])  # Was only used for initial grid search, always 2 now to reduce complexity and prevent overfitting
     #LEARNING_RATE = float(grid_search_array[4])   # Was only used for initial grid search; replaced by scheduler
     EMBEDDED_LAYER_DIM = int(grid_search_array[2])
 
     # Unaffected by grid search
     EPOCHS = epochs
 
-    DROPOUT = 0.3
-    LSTM_LAYERS = 2
+    DROPOUT = 0.2
+    # LSTM_LAYERS = 2
     LEARNING_RATE = 0.001
     
     # EARLY STOPPING
@@ -511,10 +513,10 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
             dim_hidden_layer=HIDDEN_LAYER_DIM,
             dim_out=len(encodep)).to(device)
         
-        optimizer = torch.optim.Adam(params=list(model.parameters()), lr=LEARNING_RATE)
+        optimizer = torch.optim.AdamW(params=list(model.parameters()), lr=LEARNING_RATE, weight_decay=0.1)
         
         # ADDED after initial grid search
-        scheduler = ReduceLROnPlateau(optimizer=optimizer, mode='min', factor=0.1, patience=1, threshold=0.001)
+        scheduler = ReduceLROnPlateau(optimizer=optimizer, mode='min', factor=0.5, patience=2, threshold=0.001)
             
         # --- TRAINING, VALIDATION ---
         print(f"Beginning training... using {device} device")
@@ -763,18 +765,39 @@ grid_combos = rotated_grid_centered(hyper_ranges, m=6, theta_deg=20, integer_key
 # print(len(grid_combos))
 
 # 120 possibilities, have 4 workers all doing 30 possibilities. 
-workerA = grid_combos[1:30]
-workerB = grid_combos[30:60]
-workerC = grid_combos[60:90]
-workerD = grid_combos[90:]
+# workerA = grid_combos[1:30]
+# workerB = grid_combos[30:60]
+# workerC = grid_combos[60:90]
+# workerD = grid_combos[90:]
 
-print("STARTING ROTATED GRID SEARCH FOR WORKER D!")
+# print("STARTING ROTATED GRID SEARCH FOR WORKER D!")
 
-counter = 90
+# counter = 90
 
-mlflow.set_experiment("Rotated_D")
+# mlflow.set_experiment("Rotated_D")
 
-for i in workerD:
-    comb = list(i.values())
-    runGridPoint(comb, id=counter, early_stop_patience=3, epochs=15, workerID='D')
-    counter += 1
+# for i in workerD:
+#     comb = list(i.values())
+#     runGridPoint(comb, id=counter, early_stop_patience=3, epochs=15, workerID='D')
+#     counter += 1
+# batch_size, hidden_layer, embedded layer
+
+# runGridPoint([32, 20, 60], id=100, early_stop_patience=5, epochs=30, workerID='Z') # terrible
+# runGridPoint([64, 12, 80], id=101, early_stop_patience=5, epochs=30, workerID='Z') # terrible 
+# runGridPoint([64, 16, 80], id=102, early_stop_patience=5, epochs=30, workerID='Z') # terrible
+# runGridPoint([64, 20, 80], id=103, early_stop_patience=5, epochs=30, workerID='Z') # terrible
+# runGridPoint([150, 150, 150], id=104, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.01  -- TERRIBLE
+# runGridPoint([64, 150, 150], id=105, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.01 --- TERRIBLE 
+# runGridPoint([64, 70, 150], id=106, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.01
+# runGridPoint([64, 80, 80], id=107, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.01
+#runGridPoint([64, 50, 100], id=108, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.01
+# runGridPoint([64, 150, 150], id=109, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1 --- NOT THE WORST
+# runGridPoint([32, 100, 100], id=110, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1 --- NOT THE WORST
+# runGridPoint([48, 256, 128], id=111, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1
+# runGridPoint([48, 256, 256, 2], id=112, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.2
+# runGridPoint([64, 384, 128], id=113, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1
+# runGridPoint([32, 100, 100, 3], id=114, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1
+# runGridPoint([64, 256, 128, 3], id=115, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1
+# runGridPoint([32, 100, 100, 2], id=116, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1, factor scheduler 0.5 --- NOT THE WORST
+# runGridPoint([32, 100, 100, 2], id=117, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1, dropout 0.2, factor 0.5
+runGridPoint([48, 256, 128, 2], id=118, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1, dropout 0.2, factor 0.5
