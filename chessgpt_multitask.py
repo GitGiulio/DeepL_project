@@ -10,17 +10,24 @@ import numpy as np
 from torch.amp import autocast, GradScaler
 import json
 from transformers import get_scheduler
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score,balanced_accuracy_score
+import mlflow
+
+mlflow.set_tracking_uri(
+        "http://IP_I_WILL_NOT_LEAK:5000"  # We used mlflow to track the training, it was expecially crucial for the hyperparam search we did on the RNN model
+    )
+mlflow.set_experiment("Transformer")
+
 
 MIN_TRANSFORMERS_VERSION = '4.25.1'
 
 # check transformers version
 assert transformers.__version__ >= MIN_TRANSFORMERS_VERSION, f'Please upgrade transformers to version {MIN_TRANSFORMERS_VERSION} or higher.'
 
-LIST_OF_PLAYERS = ['ArasanX', 'MassterofMayhem',
-                   'JelenaZ', 'lestri',
-                   'doreality', 'therealYardbird',
-                   'Chesssknock', 'No_signs_of_V',
+LIST_OF_PLAYERS = ['ArasanX', 'MassterofMayhem',  # This is the list of players we used in the end
+                   'JelenaZ', 'lestri',           # even tho they are not all super recognizable names
+                   'doreality', 'therealYardbird',  # these are real extremely good players that were chosen because
+                   'Chesssknock', 'No_signs_of_V',  # they have the most games in our pool
                    'Recobachess', 'drawingchest',
                    'kasparik_garik', 'ChainsOfFantasia',
                    'Consent_to_treatment', 'Alexandr_KhleBovich',
@@ -57,10 +64,9 @@ df['class'] = np.where(
     )
 )
 
-df = stratified_random_subset(df, label_col="class", per_class=1024) # I take 8020 games for each player, since this is how many we have for the one with the least
+df = stratified_random_subset(df, label_col="class", per_class=8020) # I take 8020 games for each player, since this is how many we have for the one with the least
 
-# In this I have the biggest possible Dataset while avoiding class imbalance
-
+# In this way I have the biggest possible Dataset while avoiding class imbalance
 
 df_white = df[df['white_name'].isin(LIST_OF_PLAYERS)].copy()
 df_black = df[df['black_name'].isin(LIST_OF_PLAYERS)].copy()
@@ -131,7 +137,7 @@ class ChessDataset_transformer(Dataset):
         self.class_labels = [self.player_to_idx(name) for name in labels]
         self.regression_labels = elos
         self.tokenizer = tokenizer
-        self.max_length = max_length  # TODO CHANGE TO FEED the new model
+        self.max_length = max_length
 
     def __len__(self):
         return len(self.texts)
@@ -191,8 +197,6 @@ tokenizer.pad_token = tokenizer.eos_token
 chessgpt.config.pad_token_id = tokenizer.eos_token_id
 
 
-# print(chessgpt)
-
 def masked_mean_pooling(last_hidden_state, attention_mask):
     mask = attention_mask.unsqueeze(-1).type_as(last_hidden_state)
     summed = (last_hidden_state * mask).sum(dim=1)
@@ -211,7 +215,7 @@ class SharedTwoLayerMLP(nn.Module):
         self.fc1 = nn.Linear(in_dim, shared_dim1)
         self.fc2 = nn.Linear(shared_dim1, shared_dim2)
         self.dropout = nn.Dropout(dropout)
-        self.act = nn.GELU()  # GELU is the same act fun of the transformer, but we can also try simple RELU
+        self.act = nn.GELU()  # GELU beacuse is the same act fun of the transformer, but also try simple RELU could work
 
     def forward(self, x):
         x = self.dropout(self.act(self.fc1(x)))
@@ -320,10 +324,10 @@ model = MultiTaskTransformer(
     base_model=chessgpt,
     num_classes=20,
     num_regression=2,
-    shared_dim1=1024,    # 1024
-    shared_dim2=512,    # 512
-    head_dim=256,       # 256
-    dropout=0.0         # 0.1
+    shared_dim1=1024,    # 1024 is better than 512, I will not go higher due to the fact that slows down training if it even fits in VRAM
+    shared_dim2=512,    # 512 same as above, better than 256
+    head_dim=256,       # 256 same as above, better than 128
+    dropout=0.0         # 0.1 is the other option that I tested, but gives worst performances
 )
 
 print(f"HYPERPARAM: \n shared_dim1=1024, \n shared_dim2=512, \n head_dim=256, \n dropout=0.0")
@@ -335,7 +339,7 @@ train_dataset = ChessDataset_transformer(X_train, y_train, elos_train, tokenizer
 val_dataset = ChessDataset_transformer(X_val, y_val, elos_val, tokenizer, max_length=256)
 test_dataset = ChessDataset_transformer(X_test, y_test, elos_test, tokenizer, max_length=256)
 
-print(f"HYPERPARAM: tokenizer, max_length=256") # 128
+print(f"HYPERPARAM: tokenizer, max_length=256") # 256 makes training a bit slower but seem sightly better that 128. More than 256 don't fit in VRAM.
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -357,13 +361,13 @@ for name, p in model.named_parameters():
             backbone_params.append(p)
 
 optimizer = torch.optim.AdamW([
-    {"params": head_params, "lr": 5e-4, "weight_decay": 0.00001},  # heads: faster LR
-    {"params": backbone_params, "lr": 1e-4, "weight_decay": 0.00001},  # unfrozen GPT-NeoX blocks: smaller LR
+    {"params": head_params, "lr": 5e-4},  # heads: faster LR
+    {"params": backbone_params, "lr": 1e-4},  # unfrozen GPT-NeoX blocks: smaller LR
 ])
 print(f"HYPERPARAM: lrs: 5e-4  &  1e-4")
-print(f"HYPERPARAM: weight_decays: 0.00001  &  0.00001") # 0.1 / 0.001
+print(f"HYPERPARAM: weight_decays: 0.0")  # I decided that 0.0 is the best option in this case (I tested a few values)
 
-scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=8, num_training_steps=2500)  # those steps have been calculated based on the number of data, batch size, accumulator size and n. epochs
+scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=25, num_training_steps=700)  # those steps have been calculated based on the number of data, batch size, accumulator size and n. epochs
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -371,9 +375,9 @@ model.to(device)
 
 #print(f"-------LOADING MODEL--------------")
 #model.load_state_dict(torch.load(r"/best_models/best_model.pth")) # <- this let us restart training from the last best model (not always a good idea)
-#print(f"-------LOADING MODEL DONE---------")
+#print(f"-------LOADING MODEL DONE---------")                      # FOR THE LAST AND REAL TRAINING I WILL NOT USE THIS, TO NOT RISK DATA LEAKAGE
 
-print(f"HYPERPARAM: alpha: 0.2") # 0.4 / TODO
+print(f"HYPERPARAM: alpha: 0.2") # the regression in not improving much more by giving more importance to the loss
 def train_validate(train_loader: DataLoader,
                    validation_loader: DataLoader,
                    model: nn.Module,
@@ -401,12 +405,12 @@ def train_validate(train_loader: DataLoader,
         class_labels = batch["class_labels"].to(device)
         reg_labels = batch["regression_labels"].to(device)
 
-        with autocast(device_type=device.type, dtype=torch.bfloat16):
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            class_logits = outputs["classification"]
+        with autocast(device_type=device.type, dtype=torch.bfloat16):  # I'm using autocast to reduce the precision (and size) of parameters,
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)  # this makes possible to fit in memory more parameter, and train also 2 layers of the transformer.
+            class_logits = outputs["classification"]                             # while also making training faster
             class_regr = outputs["regression"]
 
-        class_regr = torch.nan_to_num(class_regr, nan=0.0, posinf=3, neginf=-15)
+        class_regr = torch.nan_to_num(class_regr, nan=0.0, posinf=3, neginf=-15)  # those were inserted due to a bug that I solved after, they should be never userd, but remain, just in case
         reg_labels = torch.nan_to_num(reg_labels, nan=0.0, posinf=3, neginf=-15)
 
         ce_loss = torch.nn.functional.cross_entropy(class_logits.float(), class_labels)
@@ -420,6 +424,7 @@ def train_validate(train_loader: DataLoader,
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
+            print("-------------------------------------------------")
             print(f"Done {i + 1} Batches of {len(train_loader)}")
             true_labels_train_f1 = torch.cat(true_labels_train, dim=0).detach().cpu().numpy().flatten()
             pred_labels_train_f1 = torch.cat(pred_labels_train, dim=0).detach().cpu().numpy().flatten()
@@ -427,6 +432,8 @@ def train_validate(train_loader: DataLoader,
             print(f"macro_f1 = {f1_score(true_labels_train_f1, pred_labels_train_f1, average='macro')}")
             print(f"weighted_f1 = {f1_score(true_labels_train_f1, pred_labels_train_f1, average='weighted')}")
             print(f"regression_loss = {huber_loss.item()}")
+            print("-------------------------------------------------")
+
             scaler.step(optimizer)
             scaler.update()
             scheduler.step()
@@ -514,7 +521,7 @@ def train_validate(train_loader: DataLoader,
 def test(test_loader: DataLoader,
          model: nn.Module,
          device: torch.device,
-         alpha=0.1):
+         alpha=0.2):
     model.eval()
 
     batch_losses_test = []
@@ -562,11 +569,34 @@ def test(test_loader: DataLoader,
 
     return avg_test_loss, (pred_labels_test, true_labels_test), (pred_regression_test, true_regression_test)
 
+def calculateMetrics(avg_loss: np.floating, predicted_labels: np.ndarray, true_labels: np.ndarray):
+    # --- CLASSIFICATION ---
+    '''
+    Macro F1 = The average f1 score over all classes, treating each class equally.
+    This score becomes more relevant when some players have very few games.
+    '''
+    macro_f1 = f1_score(true_labels, predicted_labels, average="macro")
 
+    '''
+    Weighted F1 = Same as Macro F1, but is weighted by class frequency. It doesn't punish too hard for players with few games.
+    '''
+    weighted_f1 = f1_score(true_labels, predicted_labels, average="weighted")
+    '''
+    Balanced accuracy = Each class contributes equally to the accuracy, better than the usual way of calculating accuracy: correct / total
+    '''
+    bal_accuracy = balanced_accuracy_score(true_labels, predicted_labels)
+
+    print(
+        f"--- CLASSIFICATION METRICS --- \n"
+        f"F1 scores: [Macro={macro_f1:.3f}, Weighted={weighted_f1:.3f}] \n"
+        f"Balanced Accuracy = {bal_accuracy:.3f}\n"
+        f"Average loss = {avg_loss:.5f}")
+    return macro_f1, weighted_f1, bal_accuracy
 
 def to_serializable(obj):
     """
     Recursively convert NumPy arrays / Tensors inside lists/dicts to JSON-serializable types.
+    Now this function seem very overkill, this is because I changed the way I save the data after implementing it.
     """
     if isinstance(obj, np.ndarray):
         if obj.dtype == object:
@@ -607,55 +637,85 @@ metrics_dict = {
     "pred_regression_val": [],
     "true_regression_val": [],
 }
+with mlflow.start_run(run_name='Optimus_Prime'):
+    mlflow.log_param('batch_size', 256)
+    mlflow.log_param('MLP_shared_dim1', 1024)
+    mlflow.log_param('MLP_shared_dim2', 512)
+    mlflow.log_param('MLP_head_dim', 256)
+    mlflow.log_param('dropout', 0.0)
+    mlflow.log_param('learning_rate_MLP_head', 5e-4)
+    mlflow.log_param('learning_rate_transformer_last_2_layers', 1e-4)
+    for epoch in range(20):
+        avg_train_loss, avg_val_loss, \
+            (pred_labels_train, true_labels_train), \
+            (pred_labels_val, true_labels_val), \
+            (pred_regression_train, true_regression_train), \
+            (pred_regression_val, true_regression_val) = train_validate(train_loader, val_loader, model, optimizer,scheduler, device)
 
-for epoch in range(5):
-    avg_train_loss, avg_val_loss, \
-        (pred_labels_train, true_labels_train), \
-        (pred_labels_val, true_labels_val), \
-        (pred_regression_train, true_regression_train), \
-        (pred_regression_val, true_regression_val) = train_validate(train_loader, val_loader, model, optimizer,scheduler, device)
+        print(f"Epoch {epoch}, training metrics:")
+        t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(avg_train_loss, pred_labels_train, true_labels_train)
 
-    metrics_dict = {
-    "avg_train_loss": avg_train_loss,
-    "avg_val_loss": avg_val_loss,
-    "pred_labels_train": pred_labels_train,
-    "true_labels_train": true_labels_train,
-    "pred_labels_val": pred_labels_val,
-    "true_labels_val": true_labels_val,
-    "pred_regression_train": pred_regression_train,
-    "true_regression_train": true_regression_train,
-    "pred_regression_val": pred_regression_val,
-    "true_regression_val": true_regression_val,
+        print(f"Epoch {epoch}, validation metrics:")
+        v_macro_f1, v_weighted_f1, v_balanced_acc = calculateMetrics(avg_val_loss, pred_labels_val, true_labels_val)
+
+        mlflow.log_metric('train/loss', avg_train_loss, step=epoch)
+        mlflow.log_metric('train/macro_f1', t_macro_f1, step=epoch)
+        mlflow.log_metric('train/weighted_f1', t_weighted_f1, step=epoch)
+        mlflow.log_metric('train/balanced_acc', t_balanced_acc, step=epoch)
+        mlflow.log_metric('val/loss', avg_val_loss, step=epoch)
+        mlflow.log_metric('val/macro_f1', v_macro_f1, step=epoch)
+        mlflow.log_metric('val/weighted_f1', v_weighted_f1, step=epoch)
+        mlflow.log_metric('val/balanced_acc', v_balanced_acc, step=epoch)
+
+        metrics_dict = {
+        "avg_train_loss": avg_train_loss,
+        "avg_val_loss": avg_val_loss,
+        "pred_labels_train": pred_labels_train,
+        "true_labels_train": true_labels_train,
+        "pred_labels_val": pred_labels_val,
+        "true_labels_val": true_labels_val,
+        "pred_regression_train": pred_regression_train,
+        "true_regression_train": true_regression_train,
+        "pred_regression_val": pred_regression_val,
+        "true_regression_val": true_regression_val,
+        }
+
+        with open(f"/metrics/metrics_epoch_{epoch}.json", "w") as f:
+            json.dump(to_serializable(metrics_dict), f, indent=2)
+
+        print(f"avg_train_loss {avg_train_loss}")
+        print(f"avg_val_loss {avg_val_loss}")
+
+        if best_val_loss > avg_val_loss:
+            epochs_non_improved = 0
+            best_loss = avg_val_loss
+            torch.save(model.state_dict(), "/best_models/best_model_final.pth")
+        else:
+            epochs_non_improved += 1
+            if epochs_non_improved == 2:
+                print(f"EARLY STOPPING TRAINING")
+                break
+
+    model.load_state_dict(torch.load(r"/best_models/best_model_final.pth"))  # I load the model that performed better on validation
+
+    avg_test_loss, (pred_labels_test, true_labels_test), (pred_regression_test, true_regression_test) = test(test_loader,model,device)  # I test only the best model
+
+    print(f"Test metrics:")
+    t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(avg_val_loss, pred_labels_val, true_labels_val)
+
+    mlflow.log_metric('test/loss', avg_test_loss, step=epoch)
+    mlflow.log_metric('test/macro_f1', t_macro_f1, step=epoch)
+    mlflow.log_metric('test/weighted_f1', t_weighted_f1, step=epoch)
+    mlflow.log_metric('test/balanced_acc', t_balanced_acc, step=epoch)
+
+    test_metrics_dict = {
+        "avg_test_loss": avg_test_loss,
+        "pred_labels_test": pred_labels_test,
+        "true_labels_test": true_labels_test,
+        "pred_regression_test": pred_regression_test,
+        "true_regression_test": true_regression_test,
     }
 
-    with open(f"/metrics/metrics_epoch_{epoch}.json", "w") as f:
-        json.dump(to_serializable(metrics_dict), f, indent=2)
 
-    print(f"avg_train_loss {avg_train_loss}")
-    print(f"avg_val_loss {avg_val_loss}")
-
-    if best_val_loss > avg_val_loss:
-        epochs_non_improved = 0
-        best_loss = avg_val_loss
-        torch.save(model.state_dict(), "best_model.pth")
-    else:
-        epochs_non_improved += 1
-        if epochs_non_improved == 2:
-            print(f"EARLY STOPPING TRAINING")
-            break
-
-model.load_state_dict(torch.load(r"/best_models/best_model.pth"))  # I load the model that performed better on validation
-
-avg_test_loss, (pred_labels_test, true_labels_test), (pred_regression_test, true_regression_test) = test(test_loader,model,device)  # I test only the best model
-
-test_metrics_dict = {
-    "avg_test_loss": avg_test_loss,
-    "pred_labels_test": pred_labels_test,
-    "true_labels_test": true_labels_test,
-    "pred_regression_test": pred_regression_test,
-    "true_regression_test": true_regression_test,
-}
-
-
-with open(r"/metrics/test_metrics.json", "w") as f:
-    json.dump(to_serializable(test_metrics_dict), f, indent=2)
+    with open(r"/metrics/test_metrics.json", "w") as f:
+        json.dump(to_serializable(test_metrics_dict), f, indent=2)

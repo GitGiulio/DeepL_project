@@ -401,11 +401,11 @@ def calculateMetrics(avg_loss : np.ndarray, predicted_labels : np.ndarray, true_
     plt.savefig(f"../data/plots_chessGPT/{directory}/regression_{set}_{epoch}.png")
     plt.close()
 
-directory = 'metrics4'
-mean_elo = 2663.78369140625
-std_elo = 110.49032592773438
+directory = 'Optimus_Prime'
+mean_elo = 2663.914794921875
+std_elo = 111.10905456542969
 
-for i in range(5):
+for i in range(20):
     with open(f"../data/run_metrics_chessGPT/{directory}/metrics_epoch_{i}.json", "r") as f:
         data = json.load(f)
 
@@ -424,15 +424,15 @@ for i in range(5):
     print(f"EVAL epoch {i+1}")
     calculateMetrics(avg_val_loss,pred_labels_val,true_labels_val,pred_regression_val,true_regression_val,"val",i)
 
-#print(f"----------TEST--METRICS--------")
-#
-#with open(f"../data/run_metrics_chessGPT/{directory}/test_metrics.json", "r") as f:
-#    data = json.load(f)
-#
-#avg_test_loss = data["avg_test_loss"]
-#pred_labels_test = np.array(data["pred_labels_test"])
-#true_labels_test = np.array(data["true_labels_test"])
-#pred_regression_test = (np.array(data["pred_regression_test"]) * std_elo) + mean_elo
-#true_regression_test = (np.array(data["true_regression_test"]) * std_elo) + mean_elo
-#
-#calculateMetrics(avg_test_loss,pred_labels_test,true_labels_test,pred_regression_test,true_regression_test,"test",0)
+print(f"----------TEST--METRICS--------")
+
+with open(f"../data/run_metrics_chessGPT/{directory}/test_metrics.json", "r") as f:
+    data = json.load(f)
+
+avg_test_loss = data["avg_test_loss"]
+pred_labels_test = np.array(data["pred_labels_test"])
+true_labels_test = np.array(data["true_labels_test"])
+pred_regression_test = (np.array(data["pred_regression_test"]) * std_elo) + mean_elo
+true_regression_test = (np.array(data["true_regression_test"]) * std_elo) + mean_elo
+
+calculateMetrics(avg_test_loss,pred_labels_test,true_labels_test,pred_regression_test,true_regression_test,"test",0)

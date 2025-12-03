@@ -1,0 +1,98 @@
+/pfs/lustrep2/projappl/project_465002413/ChessGPT/chessgpt_multitask.py:33: DtypeWarning: Columns (3,5) have mixed types. Specify dtype option on import or set low_memory=False.
+  df = pd.read_csv(csv_path)
+/pfs/lustrep2/projappl/project_465002413/ChessGPT/chessgpt_multitask.py:80: FutureWarning: A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+
+For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+
+  df_white_black['white_elo'].fillna(df_white_black['white_elo'].mean(), inplace=True)
+/pfs/lustrep2/projappl/project_465002413/ChessGPT/chessgpt_multitask.py:81: FutureWarning: A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+
+For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+
+  df_white_black['black_elo'].fillna(df_white_black['black_elo'].mean(), inplace=True)
+Total: 20,853
+Train: 17,725 (85.00%)
+Val:   1,042 (5.00%)
+Test:  2,086 (10.00%)
+|-|-|-|-|-|mean_elo: 2663.78369140625|-|-|-|-|
+|-|-|-|-|-|std_elo: 110.49032592773438|-|-|-|-|
+
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]
+Loading checkpoint shards:  50%|█████     | 1/2 [00:05<00:05,  5.99s/it]
+Loading checkpoint shards: 100%|██████████| 2/2 [00:06<00:00,  2.67s/it]
+Loading checkpoint shards: 100%|██████████| 2/2 [00:06<00:00,  3.17s/it]
+HYPERPARAM: 
+ shared_dim1=1024, 
+ shared_dim2=512, 
+ head_dim=256, 
+ dropout=0.0
+HYPERPARAM: tokenizer, max_length=512
+139
+Unfroze last transformer layer.
+HYPERPARAM: lrs: 5e-4  &  1e-4
+HYPERPARAM: weight_decays: 0.00001  &  0.00001
+Using device: cuda
+HYPERPARAM: alpha: 0.2
+Traceback (most recent call last):
+  File "/pfs/lustrep2/projappl/project_465002413/ChessGPT/chessgpt_multitask.py", line 614, in <module>
+    (pred_regression_val, true_regression_val) = train_validate(train_loader, val_loader, model, optimizer,scheduler, device)
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/pfs/lustrep2/projappl/project_465002413/ChessGPT/chessgpt_multitask.py", line 403, in train_validate
+    outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/pfs/lustrep2/projappl/project_465002413/ChessGPT/chessgpt_multitask.py", line 294, in forward
+    outputs = self.base_model(input_ids=input_ids, attention_mask=attention_mask)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/transformers/utils/generic.py", line 1083, in wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/transformers/models/gpt_neox/modeling_gpt_neox.py", line 475, in forward
+    outputs = layer(
+              ^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/transformers/modeling_layers.py", line 93, in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/transformers/models/gpt_neox/modeling_gpt_neox.py", line 245, in forward
+    mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/transformers/models/gpt_neox/modeling_gpt_neox.py", line 46, in forward
+    hidden_states = self.act(hidden_states)
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/transformers/activations.py", line 69, in forward
+    return self.act(input)
+           ^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: HIP out of memory. Tried to allocate 1.25 GiB. GPU 0 has a total capacity of 63.98 GiB of which 166.00 MiB is free. Of the allocated memory 54.34 GiB is allocated by PyTorch, and 8.46 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_HIP_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
