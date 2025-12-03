@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split
 # from PIL import Image
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import Dataset, DataLoader, Subset, random_split
 # import torch.optim as optim
 # import torchvision.transforms as transforms
@@ -14,17 +15,19 @@ from collections import Counter
 # from pathlib import Path
 # from io import BytesIO
 import itertools
+import math
 from sklearn.metrics import f1_score, confusion_matrix, balanced_accuracy_score, classification_report, mean_absolute_error, mean_squared_error, r2_score
 # import seaborn as sns
 from torch.nn.utils.rnn import pad_sequence
 # import matplotlib.pyplot as plt
 import pandas as pd
-# from tabulate import tabulate
+from tabulate import tabulate
 from pathlib import Path
 # for logging
 import mlflow
 import json
 import os
+import random
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = torch.device("cpu")
@@ -91,6 +94,8 @@ data["BlackLabelID"] = data["BlackLabel"].map(encodep)
 
 # --- TOKENIZATION ---
 cleaner = str.maketrans({"[": "", "]": "", "'": "", ",": ""})
+
+# We tokenize with all available data, because then we are pretty sure all possible moves are tokenized.
 all_step = [k for s in data["list_of_moves"] for k in s.translate(cleaner).split()]
 frequency = Counter(all_step)
 dir = {"<PAD>": 2, "<UNK>": 3}
@@ -110,17 +115,17 @@ def step_encode(step, side_token=None):
 
 # --- DATASET ---
 class GameSequence(Dataset):
-    def __init__(self, df):
-        self.samples = []
-        self.moves = df["list_of_moves"].to_list()
-        self.white_labels = df["WhiteLabelID"].to_list()
-        self.black_labels = df["BlackLabelID"].to_list()
+    def __init__(self, samples):
+        self.samples = samples
+        # self.moves = df["list_of_moves"].to_list()
+        # self.white_labels = df["WhiteLabelID"].to_list()
+        # self.black_labels = df["BlackLabelID"].to_list()
 
-        for i in range(len(df)):
-            if not pd.isna(self.white_labels[i]):
-                self.samples.append((self.moves[i], 0, int(self.white_labels[i])))
-            if not pd.isna(self.black_labels[i]):
-                self.samples.append((self.moves[i], 1, int(self.black_labels[i])))
+        # for i in range(len(df)):
+        #     if not pd.isna(self.white_labels[i]):
+        #         self.samples.append((self.moves[i], 0, int(self.white_labels[i])))
+        #     if not pd.isna(self.black_labels[i]):
+        #         self.samples.append((self.moves[i], 1, int(self.black_labels[i])))
 
     def __len__(self):
         return len(self.samples)
@@ -131,7 +136,34 @@ class GameSequence(Dataset):
         y = torch.tensor(label, dtype=torch.long)
         return x, y
 
-gs_data = GameSequence(data)
+# Ensure the data is BALANCED
+
+N = 8020  # this is the minimum number in the current dataset with 20 players
+all_samples = []  # will be the balanced data
+
+random.seed(123)
+
+for player in NEW_LIST_OF_PLAYERS_MANUAL:
+    pid = encodep[player]
+
+    player_games = data[(data["WhiteLabelID"] == pid) | (data["BlackLabelID"] == pid)]
+    player_samples = []
+
+    for _, row in player_games.iterrows():
+        moves = row["list_of_moves"]
+
+        # White
+        if row["WhiteLabelID"] == pid:
+            player_samples.append((moves, 0, pid))
+        elif row["BlackLabelID"] == pid:  # player is Black
+            player_samples.append((moves, 1, pid))
+    
+    random.shuffle(player_samples)
+
+    all_samples.extend(player_samples[:N])
+
+# After tokenization, make the data balanced to only contain N number of games per player
+gs_data = GameSequence(all_samples)
 
 # --- Basic stats ---
 total_samples = len(gs_data)
@@ -298,6 +330,8 @@ def train_validate(train_loader: DataLoader,
             true_labels_val.append(ybatch)
 
     avg_val_loss = np.mean(batch_losses_val)
+    
+    scheduler.step(avg_val_loss)
 
     # Format useful lists for calculation of metrics
     pred_labels_val = torch.cat(pred_labels_val, dim=0).cpu().detach().numpy().flatten()
@@ -366,7 +400,7 @@ Shows:
     - Confusion matrix
     - Predicted vs True regression plot
 '''
-def calculateMetrics(avg_loss : np.floating, predicted_labels : np.ndarray, true_labels : np.ndarray):
+def calculateMetrics(showClassificationReport : bool, avg_loss : np.floating, predicted_labels : np.ndarray, true_labels : np.ndarray):
     # --- CLASSIFICATION ---
     '''
     Macro F1 = The average f1 score over all classes, treating each class equally.
@@ -384,12 +418,12 @@ def calculateMetrics(avg_loss : np.floating, predicted_labels : np.ndarray, true
     Is not printed, because classification_report already does it in a nice way, but wanted to include here
     Because it shows the relevance.
     '''
-    per_class_f1 = f1_score(true_labels, predicted_labels, average=None)
+    # per_class_f1 = f1_score(true_labels, predicted_labels, average=None)
 
     '''
     A full on confusion matrix of shape NxN.
     '''
-    conf_matrix = confusion_matrix(true_labels, predicted_labels)
+    # conf_matrix = confusion_matrix(true_labels, predicted_labels)
 
     '''
     Balanced accuracy = Each class contributes equally to the accuracy, better than the usual way of calculating accuracy: correct / total
@@ -402,17 +436,12 @@ def calculateMetrics(avg_loss : np.floating, predicted_labels : np.ndarray, true
         f"Balanced Accuracy = {bal_accuracy:.3f}\n"
         f"Average loss = {avg_loss:.5f}")
 
-    report = classification_report(true_labels, predicted_labels, output_dict=True)
-    df = pd.DataFrame(report).transpose()
-    # print(tabulate(df.round(3), headers='keys', tablefmt="pretty"))
-    # print(df.round(3))
-
-    # Don't show plots for now...
-    # plt.figure(figsize=(6, 6))
-    # sns.heatmap(conf_matrix, annot=False, cmap="Blues")
-    # plt.title("Confusion matrix")
-    # plt.show()
-    
+    if showClassificationReport:
+        report = classification_report(true_labels, predicted_labels, output_dict=True)
+        df = pd.DataFrame(report).transpose()
+        print(tabulate(df.round(3), headers='keys', tablefmt="pretty"))
+        # print(df.round(3))
+        
     return macro_f1, weighted_f1, bal_accuracy
 
 
@@ -437,28 +466,21 @@ Function used for the grid search algorithm, input = grid search array
 Initialization steps unaffected by the runGridPoint are NOT ran again. 
 Runs the whole RNN loop (from creating data loaders to training the model, with specified hyperparamaters)
 '''
-def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, epochs=3, logging=True, workerID='A'):
+def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, epochs=3, workerID='A'):
     # Affected by Grid Search
     BATCH_SIZE = int(grid_search_array[0])
-    DROPOUT = float(grid_search_array[1])
-    HIDDEN_LAYER_DIM = grid_search_array[2]
-    LSTM_LAYERS = int(grid_search_array[3])
-    LEARNING_RATE = float(grid_search_array[4])
-    EMBEDDED_LAYER_DIM = int(grid_search_array[5])
-    
-    # LEARNING_RATE = 0.001
-    USE_LOGGING = logging
-
-    # Learning rate increases/decreases based on batch size
-    # if BATCH_SIZE == 256:
-    #     LEARNING_RATE = 0.01    
-    # elif BATCH_SIZE == 128:
-    #     LEARNING_RATE = 0.005
-    # elif BATCH_SIZE == 64:
-    #     LEARNING_RATE = 0.001
+    # DROPOUT = float(grid_search_array[1])   # Was only used for initial grid search; will be decided upon during final testing.
+    HIDDEN_LAYER_DIM = grid_search_array[1]
+    #LSTM_LAYERS = int(grid_search_array[3])  # Was only used for initial grid search, always 2 now to reduce complexity and prevent overfitting
+    #LEARNING_RATE = float(grid_search_array[4])   # Was only used for initial grid search; replaced by scheduler
+    EMBEDDED_LAYER_DIM = int(grid_search_array[2])
 
     # Unaffected by grid search
     EPOCHS = epochs
+
+    DROPOUT = 0.3
+    LSTM_LAYERS = 2
+    LEARNING_RATE = 0.001
     
     # EARLY STOPPING
     early_stop_counter = 0  # do not change
@@ -470,118 +492,19 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
     # Reproducability
     torch.manual_seed(123)
     
-    if USE_LOGGING:
-        r_name = f"RUN {id:04d}"
-        with mlflow.start_run(run_name=r_name):
-            print(f"Starting new run {id}...")
-            TRAIN_DATALOADER = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
-            VALIDATION_DATALOADER = DataLoader(validation_data, batch_size=BATCH_SIZE, collate_fn=collate_fn)
-            TEST_DATALOADER = DataLoader(test_data, batch_size=BATCH_SIZE, collate_fn=collate_fn)
-
-            mlflow.log_param('batch_size', BATCH_SIZE)
-            mlflow.log_param('dropout', DROPOUT)
-            mlflow.log_param('hidden_layer_dim', HIDDEN_LAYER_DIM)
-            mlflow.log_param('lstm_layers', LSTM_LAYERS)
-            mlflow.log_param('learning_rate', LEARNING_RATE)
-            mlflow.log_param('embedding_dim', EMBEDDED_LAYER_DIM)
-
-            model = RecurrentNN( # Building model
-                dir=len(dir),
-                dropout=DROPOUT,
-                lstm_layers=LSTM_LAYERS,
-                dim_embedded=EMBEDDED_LAYER_DIM,
-                dim_hidden_layer=HIDDEN_LAYER_DIM,
-                dim_out=len(encodep)).to(device)
-            
-            optimizer = torch.optim.Adam(params=list(model.parameters()), lr=LEARNING_RATE)
-                
-            # --- TRAINING, VALIDATION ---
-            print(f"Beginning training... using {device} device")
-            for iEpoch in range(EPOCHS):
-                t_loss, v_loss, (pltrain, tltrain), (plval, tlval)\
-                = train_validate(train_loader=TRAIN_DATALOADER,
-                                validation_loader=VALIDATION_DATALOADER,
-                                model=model,
-                                optimizer=optimizer,
-                                scheduler=None,
-                                device=device)
-
-                print(f"Epoch {iEpoch}, training metrics:")
-                t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(t_loss, pltrain, tltrain)
-
-                print(f"Epoch {iEpoch}, validation metrics:")
-                v_macro_f1, v_weighted_f1, v_balanced_acc = calculateMetrics(v_loss, plval, tlval)
-
-                mlflow.log_metric('train/loss', t_loss, step=iEpoch)
-                mlflow.log_metric('train/macro_f1', t_macro_f1, step=iEpoch)
-                mlflow.log_metric('train/weighted_f1', t_weighted_f1, step=iEpoch)
-                mlflow.log_metric('train/balanced_acc', t_balanced_acc, step=iEpoch)
-                mlflow.log_metric('val/loss', v_loss, step=iEpoch)
-                mlflow.log_metric('val/macro_f1', v_macro_f1, step=iEpoch)
-                mlflow.log_metric('val/weighted_f1', v_weighted_f1, step=iEpoch)
-                mlflow.log_metric('val/balanced_acc', v_balanced_acc, step=iEpoch)
-            
-                metrics_dict = {
-                    "avg_train_loss": t_loss,
-                    "avg_val_loss": v_loss,
-                    "pred_labels_train": pltrain,
-                    "true_labels_train": tltrain,
-                    "pred_labels_val": plval,
-                    "true_labels_val": tlval,
-                }
-                
-                folder_path = f"/metrics/run_{id:04d}_{workerID}"
-                os.makedirs(folder_path, exist_ok=True)
-                
-                with open(f"/metrics/run_{id:04d}_{workerID}/epoch_{iEpoch}.json", "w") as f:
-                    json.dump(to_serializable(metrics_dict), f, indent=2)
-
-                early_stop_best_model_state = model.state_dict()
-
-                # -- EARLY STOPPING CHECK --
-                if v_loss < early_stop_best_loss - DELTA:
-                    # A better loss was found, so reset counter and save model state
-                    early_stop_best_loss = v_loss
-                    early_stop_counter = 0
-                    # Save the best model so we can restore it later and get the best model performance to use the test data for.
-                    early_stop_best_model_state = model.state_dict()
-                else:
-                    early_stop_counter += 1
-                    if early_stop_counter >= PATIENCE:
-                        print(f"Early stopping...")
-
-                        # Restore the best model which was saved earlier.
-                        model.load_state_dict(early_stop_best_model_state)
-                        break
-
-            # torch.save(model.state_dict(), f"/best_models/RNN_best_model_run{id:04d}_{workerID}.pth")
-
-            # --- TESTING ---
-
-            avg_test_loss, (pred_labels_test, true_labels_test) = test(test_loader=TEST_DATALOADER,
-                                model=model,
-                                device=device)
-            print(f"Testing metrics:")
-            t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(avg_test_loss, pred_labels_test, true_labels_test)
-            
-            test_metrics_dict = {
-                "avg_test_loss": avg_test_loss,
-                "pred_labels_test": pred_labels_test,
-                "true_labels_test": true_labels_test,
-            }
-
-            with open(f"/metrics/run_{id:04d}_{workerID}/test_metrics.json", "w") as f:
-                json.dump(to_serializable(test_metrics_dict), f, indent=2)
-
-            mlflow.log_metric('test/loss', avg_test_loss)
-            mlflow.log_metric('test/macro_f1', t_macro_f1)
-            mlflow.log_metric('test/weighted_f1', t_weighted_f1)
-            mlflow.log_metric('test/balanced_acc', t_balanced_acc)
-    else:
-        print(f"Starting new run, NO LOGGING...")
+    r_name = f"RUN {id:04d}"
+    with mlflow.start_run(run_name=r_name):
+        print(f"Starting new run {id}...")
         TRAIN_DATALOADER = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
         VALIDATION_DATALOADER = DataLoader(validation_data, batch_size=BATCH_SIZE, collate_fn=collate_fn)
         TEST_DATALOADER = DataLoader(test_data, batch_size=BATCH_SIZE, collate_fn=collate_fn)
+
+        mlflow.log_param('batch_size', BATCH_SIZE)
+        mlflow.log_param('dropout', DROPOUT)
+        mlflow.log_param('hidden_layer_dim', HIDDEN_LAYER_DIM)
+        mlflow.log_param('lstm_layers', LSTM_LAYERS)
+        mlflow.log_param('learning_rate', LEARNING_RATE)
+        mlflow.log_param('embedding_dim', EMBEDDED_LAYER_DIM)
 
         model = RecurrentNN( # Building model
             dir=len(dir),
@@ -592,6 +515,9 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
             dim_out=len(encodep)).to(device)
         
         optimizer = torch.optim.Adam(params=list(model.parameters()), lr=LEARNING_RATE)
+        
+        # ADDED after initial grid search
+        scheduler = ReduceLROnPlateau(optimizer=optimizer, mode='min', factor=0.1, patience=1, threshold=0.001)
             
         # --- TRAINING, VALIDATION ---
         print(f"Beginning training... using {device} device")
@@ -601,31 +527,41 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
                             validation_loader=VALIDATION_DATALOADER,
                             model=model,
                             optimizer=optimizer,
-                            scheduler=None,
+                            scheduler=scheduler,
                             device=device)
 
-            print(f"Epoch {iEpoch}, training metrics:")
-            t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(t_loss, pltrain, tltrain)
+            print(f"EPOCH {iEpoch}\n")
+            print(f"----- TRAINING -----")
+            t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(False, t_loss, pltrain, tltrain)
 
-            print(f"Epoch {iEpoch}, validation metrics:")
-            v_macro_f1, v_weighted_f1, v_balanced_acc = calculateMetrics(v_loss, plval, tlval)
-            
-            early_stop_best_model_state = model.state_dict()
-            
+            print(f"----- VALIDATION -----")
+            v_macro_f1, v_weighted_f1, v_balanced_acc = calculateMetrics(False, v_loss, plval, tlval)
+
+            mlflow.log_metric('train/loss', t_loss, step=iEpoch)
+            mlflow.log_metric('train/macro_f1', t_macro_f1, step=iEpoch)
+            mlflow.log_metric('train/weighted_f1', t_weighted_f1, step=iEpoch)
+            mlflow.log_metric('train/balanced_acc', t_balanced_acc, step=iEpoch)
+            mlflow.log_metric('val/loss', v_loss, step=iEpoch)
+            mlflow.log_metric('val/macro_f1', v_macro_f1, step=iEpoch)
+            mlflow.log_metric('val/weighted_f1', v_weighted_f1, step=iEpoch)
+            mlflow.log_metric('val/balanced_acc', v_balanced_acc, step=iEpoch)
+        
             metrics_dict = {
-                    "avg_train_loss": t_loss,
-                    "avg_val_loss": v_loss,
-                    "pred_labels_train": pltrain,
-                    "true_labels_train": tltrain,
-                    "pred_labels_val": plval,
-                    "true_labels_val": tlval,
-                }
-                
-            folder_path = f"/metrics/run_{r_name}"
+                "avg_train_loss": t_loss,
+                "avg_val_loss": v_loss,
+                "pred_labels_train": pltrain,
+                "true_labels_train": tltrain,
+                "pred_labels_val": plval,
+                "true_labels_val": tlval,
+            }
+            
+            folder_path = f"/metrics/worker{workerID}/run_{id:04d}"
             os.makedirs(folder_path, exist_ok=True)
             
-            with open(f"/metrics/run_{r_name}/epoch_{iEpoch}.json", "w") as f:
+            with open(f"/metrics/worker{workerID}/run_{id:04d}/epoch_{iEpoch}.json", "w") as f:
                 json.dump(to_serializable(metrics_dict), f, indent=2)
+
+            early_stop_best_model_state = model.state_dict()
 
             # -- EARLY STOPPING CHECK --
             if v_loss < early_stop_best_loss - DELTA:
@@ -643,23 +579,30 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
                     model.load_state_dict(early_stop_best_model_state)
                     break
 
+        # torch.save(model.state_dict(), f"/best_models/RNN_best_model_run{id:04d}_{workerID}.pth")
+
         # --- TESTING ---
+
         avg_test_loss, (pred_labels_test, true_labels_test) = test(test_loader=TEST_DATALOADER,
                             model=model,
                             device=device)
-        print(f"Epoch {iEpoch}, testing metrics:")
-        t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(avg_test_loss, pred_labels_test, true_labels_test)
+        print(f"----- TESTING -----")
+        t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(True, avg_test_loss, pred_labels_test, true_labels_test)
         
         test_metrics_dict = {
             "avg_test_loss": avg_test_loss,
             "pred_labels_test": pred_labels_test,
             "true_labels_test": true_labels_test,
-            }
+        }
 
-        with open(f"/metrics/run_{r_name}/test_metrics.json", "w") as f:
+        with open(f"/metrics/worker{workerID}/run_{id:04d}/test_metrics.json", "w") as f:
             json.dump(to_serializable(test_metrics_dict), f, indent=2)
 
-
+        mlflow.log_metric('test/loss', avg_test_loss)
+        mlflow.log_metric('test/macro_f1', t_macro_f1)
+        mlflow.log_metric('test/weighted_f1', t_weighted_f1)
+        mlflow.log_metric('test/balanced_acc', t_balanced_acc)
+ 
 
 '''
 This code thinks about how to implement grid search (for our RNN model), given the lecture
@@ -710,14 +653,14 @@ Hyperparameter specific notes:
 # }
 
 # C
-initial_grid_search_parameters = {
-    'batch_size': [32, 128, 256],
-    'dropout': [0.1, 0.4],
-    'hidden_layer_dim': [256],
-    'lstm_layers': [2, 3],
-    'learning_rate': [1e-4, 1e-3, 1e-2],
-    'embedded_layer_dim': [64, 128],
-}
+# initial_grid_search_parameters = {
+#     'batch_size': [32, 128, 256],
+#     'dropout': [0.1, 0.4],
+#     'hidden_layer_dim': [256],
+#     'lstm_layers': [2, 3],
+#     'learning_rate': [1e-4, 1e-3, 1e-2],
+#     'embedded_layer_dim': [64, 128],
+# }
 
 # USED LATER
 # concentrated_grid_search_parameters = {
@@ -733,7 +676,58 @@ def return_combinations(dict_hyperparameters):
 
     return list(itertools.product(*all_parameters))
 
-# print(len(return_combinations(initial_grid_search_parameters)))
+def rotated_grid_centered(ranges, m=4, theta_deg=20, integer_keys=None):
+    """
+    Rotated grid search with hypercube initially spanning [-0.5, 1.5] (center=1),
+    rotated in n dimensions, then mapped back to hyperparameter ranges.
+
+    ranges: dict {param_name: (low, high)}
+    m: points per dimension
+    theta_deg: rotation angle
+    integer_keys: list of keys to round to integer
+    """
+    if integer_keys is None:
+        integer_keys = []
+
+    keys = list(ranges.keys())
+    dims = len(keys)
+
+    axis_points = [np.linspace(0, 1, m) for _ in range(dims)]
+    base_grid = np.array(list(itertools.product(*axis_points)))
+
+    theta = math.radians(theta_deg)
+    rotated_grid = []
+
+    center = 0.5
+    for p in base_grid:
+        p_rot = p.copy()
+        for i in range(dims):
+            for j in range(i + 1, dims):
+                x_shift = p_rot[i] - center
+                y_shift = p_rot[j] - center
+                x_rot = x_shift * np.cos(theta) - y_shift * np.sin(theta)
+                y_rot = x_shift * np.sin(theta) + y_shift * np.cos(theta)
+                p_rot[i] = x_rot + center
+                p_rot[j] = y_rot + center
+        rotated_grid.append(p_rot)
+
+    rotated_grid = np.array(rotated_grid)
+
+    rotated_grid = np.array([p for p in rotated_grid if np.all((p >= 0) & (p <= 1))])
+
+    lo_vals = np.array([ranges[k][0] for k in keys])
+    hi_vals = np.array([ranges[k][1] for k in keys])
+    combos = []
+    for p in rotated_grid:
+        cfg = {}
+        for idx, k in enumerate(keys):
+            val = lo_vals[idx] + p[idx] * (hi_vals[idx] - lo_vals[idx])
+            if k in integer_keys:
+                val = int(round(val))
+            cfg[k] = val
+        combos.append(cfg)
+
+    return combos
 
 # Run MLFlow locally on port 5000, set IP address here:
 mlflow.set_tracking_uri(
@@ -742,9 +736,36 @@ mlflow.set_tracking_uri(
 
 # mlflow.set_experiment("RNN_OvernightGridSearch_A")
 # mlflow.set_experiment("RNN_OvernightGridSearch_B")
-mlflow.set_experiment("RNN_OvernightGridSearch_C")
+# mlflow.set_experiment("RNN_OvernightGridSearch_C")
 
-for i, comb in enumerate(return_combinations(initial_grid_search_parameters)):
-    runGridPoint(comb, id=i, early_stop_patience=100, epochs=3, logging=True, workerID='C')
+mlflow.set_experiment("SoloTestsRNN")
 
-# runGridPoint([64, 0.2, 64, 2, 1e-3, 64], id=3, early_stop_patience=10, epochs=2, logging=True, workerID='A')
+# for i, comb in enumerate(return_combinations(initial_grid_search_parameters)):
+#     runGridPoint(comb, id=i, early_stop_patience=100, epochs=3, logging=True, workerID='C')
+
+# batch_size, dropout, hidden_layer, lstm_layer, learning_rate, embedded layer
+# After initial run
+# batch_size, hidden_layer, embedded layer
+
+# ROTATED GRID SEARCH
+hyper_ranges = {
+    'batch_size': (64, 256),
+    # 'dropout': (0.0, 0.6),
+    'hidden_layer_dim': (40, 160),
+    # 'learning_rate': (5e-6, 1e-3),
+    'embedding_size': (90, 150),
+    #'LSTM_layers': (2, 2)
+}
+
+# All keys in the rotated grid should be rounded to nearest integer.
+integer_keys = ['batch_size', 'hidden_layer_dim', 'embedding_size']
+
+# Generate rotated grid
+grid_combos = rotated_grid_centered(hyper_ranges, m=5, theta_deg=20, integer_keys=integer_keys)
+
+# print(list(grid_combos.values()))
+
+for i in grid_combos:
+    print(i)
+
+runGridPoint([128, 80, 100], id=1, early_stop_patience=5, epochs=15, workerID='D')
