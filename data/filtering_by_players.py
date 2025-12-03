@@ -5,7 +5,7 @@ import gc
 
 #csvs_dir = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\DATA_PROJECT"
 csvs_dir = r"C:\Users\giuli\PycharmProjects\DeepL_project_test\data\all_games_csvs"
-outfile_path = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\filtered_games_nobots.csv"
+#outfile_path = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\filtered_games_nobots.csv"
 
 FIDE_RECOGNIZED_TITLES = ['IM', 'FM', 'CM', 'GM', 'NM', 'FIDE']
 BOT_TITLE = 'bot'
@@ -100,11 +100,24 @@ NEW_LIST_OF_PLAYERS_MANUAL = ['ArasanX', 'MassterofMayhem', 'JelenaZ', 'lestri',
 'No_signs_of_V', 'Recobachess', 'drawingchest', 'kasparik_garik', 'ChainsOfFantasia','Consent_to_treatment',
 'Alexandr_KhleBovich', 'unknown-maestro_2450', 'gefuehlter_FM', 'gmmitkov', 'positionaloldman',"Carlsen, Magnus","Nakamura, Hikaru"]
 
+LIST_100_PLAYERS = ['ArasanX', 'MassterofMayhem', 'JelenaZ', 'lestri', 'doreality', 'therealYardbird', 'Chesssknock',
+'No_signs_of_V', 'Recobachess', 'drawingchest', 'kasparik_garik', 'ChainsOfFantasia','Consent_to_treatment',
+'Alexandr_KhleBovich', 'unknown-maestro_2450', 'gefuehlter_FM', 'gmmitkov', 'positionaloldman','Consent_to_treatment',
+'Gyalog75','chargemax23','Boreminator','sotirakis','cn_ua','anhao','manuel-abarca','Chess_diviner',
+'Toro123','Odirovski','manneredmonkey','Viktor_Solovyov','Stas-2444','Zhigalko, Sergei','AKS-Mantissa',
+'vistagausta','Romsta','Aborigen100500','JoeAssaad','bodoque50','doreality1991','Niper13','Violet_Pride','Ivanoblitz','Atalik, Suat',
+'iakov98','AlexD64','satlan','Bakayoyo','athena-pallada','Pblu35','okriak','morus22','Corre_por_tu_vida','Attila76',
+'Karlos_ulsk','www68','Podrebo','papasi','crackcubano','Chessibague','Konstrictor','EleKtRoMaGnIt','snayperchess','ZhohoFF',
+'dont_blunder','Ute-Manfred','Konkurs_prognozov','Mischuk_D','kenkons','notkevich','Elda64','Konnov, Oleg','DrawDenied_Twitch',
+'Vnebo','Leviathan64','VonSinnen','SpiderMoves','econpower','Napo18','KQRBNPkqrbnp','kirlianitalian','DOCTAL','bingo95',
+'smurf42','IDISJUDA','Lightlike','Enialios','miki_train','Nguyen, Duc Hoa','FlaggingIsADisease','MrSOK','wuzhaobing',
+'Barry_Lindon','cutemouse83','Rumple_DarkOne','ElexusChess','Herushkanamura','Yarebore',"Carlsen, Magnus","Nakamura, Hikaru"]
 
-new_df = filter_by_players(csvs_dir,NEW_LIST_OF_PLAYERS_MANUAL)
+print(len(LIST_100_PLAYERS))
+new_df = filter_by_players(csvs_dir,LIST_100_PLAYERS)
 
 print(new_df.head())
 
 print("Saving new dataframe")
-new_df.to_csv(r"C:\Users\giuli\PycharmProjects\DeepL_project_test\data\filtered_games_new.csv",index=False)
+new_df.to_csv(r"C:\Users\giuli\PycharmProjects\DeepL_project_test\data\filtered_games_100_players.csv",index=False)
 print("Saved")

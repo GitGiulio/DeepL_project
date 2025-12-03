@@ -92,11 +92,11 @@ notkevich                            9575
 Elda64                               9570
 PetersBot                            9549
 Konnov, Oleg                         9503
-pawn_git                             9495
+pawn_git                             9495 -
 DrawDenied_Twitch                    9453
 Vnebo                                9436
 Leviathan64                          9377
-Mavi_Alpha                           9364
+Mavi_Alpha                           9364 -
 VonSinnen                            9258
 Nakamura, Hikaru                     9241 GM
 SpiderMoves                          9191
@@ -114,7 +114,7 @@ miki_train                           8617
 Nguyen, Duc Hoa                      8597
 FlaggingIsADisease                   8593
 MrSOK                                8541
-torombot                             8523
+torombot                             8523 -
 wuzhaobing                           8468
 Barry_Lindon                         8465
 cutemouse83                          8463
