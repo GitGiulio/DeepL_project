@@ -38,6 +38,7 @@ print(f"Using device {device}")
 # data_path = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\data\\filtered_games_20_players.csv"
 # project_root = "/teamspace/studios/this_studio/DeepL_project"
 data_path = "/filtered_games_new.csv"
+data_path = "/filtered_games_100_players.csv"
 
 # Data loading
 print("Loading data...")
@@ -52,12 +53,26 @@ print("Data loaded...")
 # print("Only using the first 200 rows for this test")
 
 # --- SETTINGS ---
-NEW_LIST_OF_PLAYERS_MANUAL = [
-    'ArasanX','MassterofMayhem','JelenaZ','lestri','doreality','therealYardbird',
-    'Chesssknock','No_signs_of_V','Recobachess','drawingchest','kasparik_garik',
-    'ChainsOfFantasia','Consent_to_treatment','Alexandr_KhleBovich','unknown-maestro_2450',
-    'gefuehlter_FM','gmmitkov','positionaloldman',"Carlsen, Magnus","Nakamura, Hikaru"
-]
+# NEW_LIST_OF_PLAYERS_MANUAL = [
+#     'ArasanX','MassterofMayhem','JelenaZ','lestri','doreality','therealYardbird',
+#     'Chesssknock','No_signs_of_V','Recobachess','drawingchest','kasparik_garik',
+#     'ChainsOfFantasia','Consent_to_treatment','Alexandr_KhleBovich','unknown-maestro_2450',
+#     'gefuehlter_FM','gmmitkov','positionaloldman',"Carlsen, Magnus","Nakamura, Hikaru"
+# ]
+
+NEW_LIST_OF_PLAYERS_MANUAL = ['ArasanX', 'MassterofMayhem', 'JelenaZ', 'lestri', 'doreality', 'therealYardbird', 'Chesssknock',
+'No_signs_of_V', 'Recobachess', 'drawingchest', 'kasparik_garik', 'ChainsOfFantasia','Consent_to_treatment',
+'Alexandr_KhleBovich', 'unknown-maestro_2450', 'gefuehlter_FM', 'gmmitkov', 'positionaloldman','Consent_to_treatment',
+'Gyalog75','chargemax23','Boreminator','sotirakis','cn_ua','anhao','manuel-abarca','Chess_diviner',
+'Toro123','Odirovski','manneredmonkey','Viktor_Solovyov','Stas-2444','Zhigalko, Sergei','AKS-Mantissa',
+'vistagausta','Romsta','Aborigen100500','JoeAssaad','bodoque50','doreality1991','Niper13','Violet_Pride','Ivanoblitz','Atalik, Suat',
+'iakov98','AlexD64','satlan','Bakayoyo','athena-pallada','Pblu35','okriak','morus22','Corre_por_tu_vida','Attila76',
+'Karlos_ulsk','www68','Podrebo','papasi','crackcubano','Chessibague','Konstrictor','EleKtRoMaGnIt','snayperchess','ZhohoFF',
+'dont_blunder','Ute-Manfred','Konkurs_prognozov','Mischuk_D','kenkons','notkevich','Elda64','Konnov, Oleg','DrawDenied_Twitch',
+'Vnebo','Leviathan64','VonSinnen','SpiderMoves','econpower','Napo18','KQRBNPkqrbnp','kirlianitalian','DOCTAL','bingo95',
+'smurf42','IDISJUDA','Lightlike','Enialios','miki_train','Nguyen, Duc Hoa','FlaggingIsADisease','MrSOK','wuzhaobing',
+'Barry_Lindon','cutemouse83','Rumple_DarkOne','ElexusChess','Herushkanamura','Yarebore',"Carlsen, Magnus","Nakamura, Hikaru"]
+
 
 # --- DATA PREPARATION ---
 TRAIN_SPLIT = 0.8
@@ -137,6 +152,7 @@ class GameSequence(Dataset):
         return x, y
 
 # Ensure the data is BALANCED
+balanced = False
 
 N = 8020  # this is the minimum number in the current dataset with 20 players
 all_samples = []  # will be the balanced data
@@ -160,7 +176,10 @@ for player in NEW_LIST_OF_PLAYERS_MANUAL:
     
     random.shuffle(player_samples)
 
-    all_samples.extend(player_samples[:N])
+    if balanced:
+        all_samples.extend(player_samples[:N])
+    else:
+        all_samples.extend(player_samples)
 
 # After tokenization, make the data balanced to only contain N number of games per player
 gs_data = GameSequence(all_samples)
@@ -187,6 +206,7 @@ for i in range(min(6, total_samples)):
 # Applying attention to LSTM outputs
 class RecurrentNN(nn.Module):
     def __init__(self, dir, dropout, lstm_layers, dim_embedded, dim_hidden_layer, dim_out):
+        print(dim_out)
         super(RecurrentNN, self).__init__()
 
         # lookup table for the tokens
@@ -215,7 +235,7 @@ class RecurrentNN(nn.Module):
         )
         
         self.attention = nn.Linear(2*dim_hidden_layer, 1)
-
+        self.att_dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(2 * dim_hidden_layer)
 
     def forward(self, x):
@@ -224,6 +244,7 @@ class RecurrentNN(nn.Module):
         lstm_out = self.norm(lstm_out)
         
         attention_weights = torch.softmax(self.attention(lstm_out).squeeze(-1), dim=1)
+        attention_weights = self.att_dropout(attention_weights)  # add another dropout layer for less memorization
         context_vector = torch.sum(lstm_out * attention_weights.unsqueeze(-1), dim=1)
 
         # Attempted, but not much difference
@@ -477,10 +498,12 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
     # Unaffected by grid search
     EPOCHS = epochs
 
-    DROPOUT = 0.2
+    DROPOUT = 0.3
     # LSTM_LAYERS = 2
     LEARNING_RATE = 0.001
-    
+    WEIGHT_DECAY = 0.005
+    SCHEDULER_FACTOR = 0.33
+
     # EARLY STOPPING
     early_stop_counter = 0  # do not change
     early_stop_best_loss = torch.inf
@@ -504,6 +527,8 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
         mlflow.log_param('lstm_layers', LSTM_LAYERS)
         mlflow.log_param('learning_rate', LEARNING_RATE)
         mlflow.log_param('embedding_dim', EMBEDDED_LAYER_DIM)
+        mlflow.log_param('weight_decay', WEIGHT_DECAY)
+        mlflow.log_param('lr_scheduler_factor', SCHEDULER_FACTOR)
 
         model = RecurrentNN( # Building model
             dir=len(dir),
@@ -513,10 +538,33 @@ def runGridPoint(grid_search_array : list, id : int, early_stop_patience=100, ep
             dim_hidden_layer=HIDDEN_LAYER_DIM,
             dim_out=len(encodep)).to(device)
         
-        optimizer = torch.optim.AdamW(params=list(model.parameters()), lr=LEARNING_RATE, weight_decay=0.1)
+        # https://arxiv.org/abs/2502.08441
+        # Disable weight_decay on parameters: bias, embedding and normalization. 
+        decay = []
+        no_decay = []
+
+        for name, param in model.named_parameters():
+            if "bias" in name:
+                no_decay.append(param)
+            elif "embed" in name.lower():
+                no_decay.append(param)
+            elif "norm" in name.lower():
+                no_decay.append(param)
+            else:
+                decay.append(param)
+
+        optimizer = torch.optim.AdamW(
+            [
+                {"params": decay, "weight_decay": WEIGHT_DECAY},
+                {"params": no_decay, "weight_decay": 0.0},
+            ],
+            lr=LEARNING_RATE
+        )
+
+        # optimizer = torch.optim.AdamW(params=list(model.parameters()), lr=LEARNING_RATE, weight_decay=0.1)
         
         # ADDED after initial grid search
-        scheduler = ReduceLROnPlateau(optimizer=optimizer, mode='min', factor=0.5, patience=2, threshold=0.001)
+        scheduler = ReduceLROnPlateau(optimizer=optimizer, mode='min', factor=SCHEDULER_FACTOR, patience=2, threshold=0.001)
             
         # --- TRAINING, VALIDATION ---
         print(f"Beginning training... using {device} device")
@@ -737,7 +785,7 @@ mlflow.set_tracking_uri(
 # mlflow.set_experiment("RNN_OvernightGridSearch_B")
 # mlflow.set_experiment("RNN_OvernightGridSearch_C")
 
-mlflow.set_experiment("SoloTestsRNN")
+# mlflow.set_experiment("SoloTestsRNN")
 
 # for i, comb in enumerate(return_combinations(initial_grid_search_parameters)):
 #     runGridPoint(comb, id=i, early_stop_patience=100, epochs=3, logging=True, workerID='C')
@@ -800,4 +848,85 @@ grid_combos = rotated_grid_centered(hyper_ranges, m=6, theta_deg=20, integer_key
 # runGridPoint([64, 256, 128, 3], id=115, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1
 # runGridPoint([32, 100, 100, 2], id=116, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1, factor scheduler 0.5 --- NOT THE WORST
 # runGridPoint([32, 100, 100, 2], id=117, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1, dropout 0.2, factor 0.5
-runGridPoint([48, 256, 128, 2], id=118, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1, dropout 0.2, factor 0.5
+# runGridPoint([48, 256, 128, 2], id=118, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1, dropout 0.2, factor 0.5
+# runGridPoint([32, 256, 128, 2], id=119, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1, dropout 0.2, factor 0.5
+# runGridPoint([32, 256, 86, 2], id=120, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.1, dropout 0.2, factor 0.5
+# runGridPoint([48, 256, 128, 2], id=121, early_stop_patience=15, epochs=30, workerID='Z')  # ADAMW, weight decay 0.05 on linear layers, not embeddings or norm
+# runGridPoint([32, 256, 128, 2], id=122, early_stop_patience=15, epochs=30, workerID='Z')  # ADAMW, weight decay 0.05 on linear layers, not embeddings or norm, dropout 0.2, factor 0.5
+# runGridPoint([32, 256, 86, 2], id=123, early_stop_patience=5, epochs=30, workerID='Z')  # ADAMW, weight decay 0.05 on linear layers, not embeddings or norm, dropout 0.2, factor 0.5
+# runGridPoint([48, 256, 128, 2], id=124, early_stop_patience=15, epochs=30, workerID='Z')  # ADAMW, weight decay 0.15 on linear layers, not embeddings or norm, dropout 0.4, factor 0.3
+# runGridPoint([32, 100, 100, 2], id=125, early_stop_patience=15, epochs=30, workerID='Z')  # ADAMW, weight decay 0.15 on linear layers, not embeddings or norm, dropout 0.4, factor 0.3
+# runGridPoint([32, 128, 64, 2], id=126, early_stop_patience=15, epochs=50, workerID='Z')  # ADAMW, weight decay 0.15 on linear layers, not embeddings or norm, dropout 0.4, factor 0.3
+# runGridPoint([32, 256, 128, 2], id=127, early_stop_patience=15, epochs=50, workerID='Z')  # ADAMW, weight decay 0.15 on linear layers, not embeddings or norm, dropout 0.4, factor 0.3
+# runGridPoint([64, 256, 128, 1], id=128, early_stop_patience=15, epochs=50, workerID='Z')  # ADAMW, weight decay 0.15 on linear layers, not embeddings or norm, dropout 0.4, factor 0.3
+# runGridPoint([64, 256, 128, 1], id=129, early_stop_patience=15, epochs=50, workerID='Z')  # ADAMW, weight decay 0.15 on linear layers, not embeddings or norm, dropout 0.4, factor 0.3
+# runGridPoint([128, 350, 64, 1], id=130, early_stop_patience=15, epochs=50, workerID='Z')  # ADAMW, weight decay 0.15 on linear layers, not embeddings or norm, dropout 0.4, factor 0.3
+
+mlflow.set_experiment("100PlayersRNN")
+
+# RUNS WITH 100 players
+
+'''
+==========================================================================================
+Layer (type:depth-idx)                   Output Shape              Param #
+==========================================================================================
+RecurrentNN                              [128, 20]                 --
+├─Embedding: 1-1                         [128, 101, 258]           2,580
+├─LSTM: 1-2                              [128, 101, 256]           792,576
+├─LayerNorm: 1-3                         [128, 101, 256]           512
+├─Linear: 1-4                            [128, 101, 1]             257
+├─Sequential: 1-5                        [128, 20]                 --
+│    └─Linear: 2-1                       [128, 128]                32,896
+│    └─ReLU: 2-2                         [128, 128]                --
+│    └─Dropout: 2-3                      [128, 128]                --
+│    └─Linear: 2-4                       [128, 20]                 2,580
+==========================================================================================
+Total params: 831,401
+Trainable params: 831,401
+Non-trainable params: 0
+Total mult-adds (Units.GIGABYTES): 10.25
+==========================================================================================
+Input size (MB): 0.10
+Forward/backward pass size (MB): 79.89
+Params size (MB): 3.33
+Estimated Total Size (MB): 83.32
+==========================================================================================
+'''
+
+# runGridPoint([128, 256, 128, 2], id=200, early_stop_patience=10, epochs=30, workerID='Z')
+
+
+# 80, 80 summary:
+'''
+==========================================================================================
+Layer (type:depth-idx)                   Output Shape              Param #
+==========================================================================================
+RecurrentNN                              [150, 20]                 --
+├─Embedding: 1-1                         [150, 101, 80]            800
+├─LSTM: 1-2                              [150, 101, 160]           258,560
+├─LayerNorm: 1-3                         [150, 101, 160]           320
+├─Linear: 1-4                            [150, 101, 1]             161
+├─Sequential: 1-5                        [150, 20]                 --
+│    └─Linear: 2-1                       [150, 80]                 12,880
+│    └─ReLU: 2-2                         [150, 80]                 --
+│    └─Dropout: 2-3                      [150, 80]                 --
+│    └─Linear: 2-4                       [150, 20]                 1,620
+==========================================================================================
+Total params: 274,341
+Trainable params: 274,341
+Non-trainable params: 0
+Total mult-adds (Units.GIGABYTES): 3.92
+==========================================================================================
+Input size (MB): 0.12
+Forward/backward pass size (MB): 48.72
+Params size (MB): 1.10
+Estimated Total Size (MB): 49.94
+==========================================================================================
+'''
+
+# runGridPoint([64, 80, 80, 2], id=201, early_stop_patience=10, epochs=30, workerID='Z')
+
+# runGridPoint([64, 128, 128, 1], id=202, early_stop_patience=10, epochs=30, workerID='Z')
+
+# Again, unbalanced data now
+runGridPoint([128, 256, 128, 2], id=200, early_stop_patience=10, epochs=30, workerID='Z')

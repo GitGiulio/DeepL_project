@@ -62,9 +62,9 @@ model = RecurrentNN( # Building model
     dir=10,
     dropout=0.1,
     lstm_layers=2,
-    dim_embedded=150,
-    dim_hidden_layer=150,
+    dim_embedded=258,
+    dim_hidden_layer=128,
     dim_out=20
 ).to(device)
 
-print(summary(model=model, input_size=(150, 101), dtypes=[torch.long]))
+print(summary(model=model, input_size=(128, 101), dtypes=[torch.long]))
