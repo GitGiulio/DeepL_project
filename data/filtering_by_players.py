@@ -3,10 +3,43 @@ import os
 import pandas as pd
 import gc
 
+'''
+@author Giulio Lo Cigno, Mathijs Tobé
+
+A helper file for creating CSV files with the necessary data. Used by both the transformer and RNN models.
+Based on the data exported from https://lumbrasgigabase.com/en/download-in-pgn-format-en/
+
+The main goal of this file is to FILTER all games from this gigabase from bots, because we do not want to predict them.
+
+The workflow is a bit odd:
+-> find_most_common_players() is called on the lumbras db files, finding the most common players in all the games (huuuuge files, so not ran often)
+    -> Prints most common players, which is then exported to a .txt file, ready for manual processing
+-> The first N number of players in this txt file are manually researched, to see if they are bots or not. 
+    -> Manually researching doesn't take up much time, just google the username. Big platforms like chess.com or lichess.org specify on the acc name if its a bot or not.
+    -> 'bot'/'IM'/any other title are manually added, so the other functions can recognize whether or not to add them.
+[filtered_player_counts_output.txt]:head(9)
+Flamerare                           67339 bot
+RaspFish                            53586 bot
+YoBot_v2                            38073 bot
+Nadigraj                            35821 bot
+ToromBot                            34563 bot
+ArasanX                             27163 unknown_real
+Nikitosikbot                        26215 bot
+MassterofMayhem                     26068 IM
+JelenaZ                             24452 unknown_real
+-> create_list_of_players() is called on this manually changed txt file, keeping the ones with the 'non-bot' titles.
+-> filter_by_players() is again called on the huge database sets of lumbras
+    -> Stores the games of the player_list previously created in a new csv file, ready for exporting. 
+-> This new, filtered exported CSV file is then used by transformer and RNN workflow.
+'''
+
+# Where is the data stored that is downloaded from Lumbrasgigabase.com? 
+
 #csvs_dir = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\DATA_PROJECT"
 csvs_dir = r"C:\Users\giuli\PycharmProjects\DeepL_project_test\data\all_games_csvs"
 #outfile_path = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\filtered_games_nobots.csv"
 
+# Keep these titles if specified.
 FIDE_RECOGNIZED_TITLES = ['IM', 'FM', 'CM', 'GM', 'NM', 'FIDE']
 BOT_TITLE = 'bot'
 OTHER_REAL_PLAYER_TITLE = 'unknown_real'
@@ -20,7 +53,7 @@ MINIMUM_OTB_ELO = 2000
 MINIMUM_ONLINE_ELO = 2400
 
 # Dont use anymore, unless new data is downloaded!
-def find_most_common_players(csvs_dir)->pd.DataFrame:
+def find_most_common_players(csvs_dir) -> pd.DataFrame:
     global_counts = pd.DataFrame()
     list = []
     for filename in os.listdir(csvs_dir):
@@ -78,13 +111,14 @@ def create_list_of_players(txtFile) -> list:
     
     return list_of_players[:PLAYER_CAP]
 
+# Only called in the start. 
 #most_common_players = find_most_common_players(csvs_dir)
 #print(most_common_players)
 
 #players = create_list_of_players('C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\data\\filtered_player_counts_output.txt')
 #print(players)
 
-'''
+''' exported list by create_list_of_players()
 ['ArasanX', 'MassterofMayhem', 'JelenaZ', 'lestri', 'doreality', 'therealYardbird', 'Chesssknock', 
 'No_signs_of_V', 'Recobachess', 'drawingchest', 'kasparik_garik', 'ChainsOfFantasia', 
 'Alexandr_KhleBovich', 'unknown-maestro_2450', 'gefuehlter_FM', 'gmmitkov', 'positionaloldman', 
