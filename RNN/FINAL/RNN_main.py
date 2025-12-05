@@ -239,16 +239,22 @@ initial_grid_search_parameters = {
 # Should speak for itself
 # We ran the initial grid search on 3 epochs only, because of limited resources on LUMI.
 # On average, 3 epochs took about 8 minutes to run.
+# In the actual run, the combinations were split up in 3 'workers', all working simultaneously, with different 'workerID's, but uploading
+# to the same experiment name on MLFlow.
+
+WEIGHT_DECAY = 0.05
+SCHEDULER_FACTOR = 0.33
+
 for i, comb in enumerate(return_combinations(initial_grid_search_parameters)):
-    comb.append(0.05)  # weight_decay
-    comb.append(0.33)  # learning_rate scheduler factor (divide by 3 if loss does not decrease in 2 epochs)
+    comb.append(WEIGHT_DECAY)  # weight_decay
+    comb.append(SCHEDULER_FACTOR)  # learning_rate scheduler factor (divide by 3 if loss does not decrease in 2 epochs)
     run_grid_point(
         grid_search_array=comb,
         train_data=train_data,
         validation_data=validation_data,
         test_data=test_data,
         collate_fn=collate_fn,
-        RNN_model=Chess_RNN,
+        RNN_model=Chess_RNN.Chess_RNN,
         device=device,
         len_dir=len(dir),
         classes_len=len(NEW_LIST_OF_PLAYERS_MANUAL),

@@ -156,7 +156,7 @@ def run_grid_point(
                 train_data : torch.utils.data.Subset,
                 validation_data : torch.utils.data.Subset,
                 test_data : torch.utils.data.Subset,
-                collate_fn : function, 
+                collate_fn, 
                 RNN_model : torch.nn.Module,
                 device : torch.device,
                 len_dir : int,

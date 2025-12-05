@@ -20,7 +20,7 @@ class Chess_RNN(nn.Module):
         # embedding lookup table for the tokens
         self.table = nn.Embedding( 
             num_embeddings=dir,
-            embedding_dim=dim_embedded,  # size of embeddings
+            embedding_dim=dim_embedded,  
             padding_idx=2  # telling torch 0's are padding, not actual moves
         )
 
@@ -42,8 +42,11 @@ class Chess_RNN(nn.Module):
             nn.Linear(dim_hidden_layer, dim_out)
         )
         
+        # Used for creating a context vector
         self.attention = nn.Linear(2*dim_hidden_layer, 1)
         self.att_dropout = nn.Dropout(dropout)
+        
+        # The output of the LSTM is normalized, 
         self.norm = nn.LayerNorm(2 * dim_hidden_layer)
 
     def forward(self, x):

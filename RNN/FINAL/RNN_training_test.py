@@ -102,7 +102,7 @@ def train_validate(train_loader: torch.utils.data.DataLoader,
 
 Standard test function
 '''
-def test(test_loader: nn.utils.data.DataLoader,
+def test(test_loader: torch.utils.data.DataLoader,
          model: nn.Module,
          device: torch.device):
     # Now we test on the test data at the end
