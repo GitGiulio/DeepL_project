@@ -185,9 +185,7 @@ for i in range(min(6, total_samples)):
     print(f"Sample {i}: side={side_name}, label={label_name}, first 10 tokens={step_encode(moves, side_token=side_token)[:10]}")
     
 # Dynamic padding per batch using a collate function
-'''
-@author Peter Normann Diekema
-'''
+
 def collate_fn(batch):
     xs, ys = zip(*batch)
     xs = [torch.tensor(x, dtype=torch.long) if not isinstance(x, torch.Tensor) else x for x in xs]
