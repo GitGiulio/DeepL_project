@@ -38,7 +38,7 @@ Containing all the required functions for doing HYPERPARAMETER GRID SEARCH for t
 '''
 
 '''
-    @author: Peter Normann Diekema & Mathijs Tobé - With help of ChatGPT for rotation in N dimensions logic and understanding
+    @author: Peter Normann Diekema - With help of ChatGPT for rotation in N dimensions logic and understanding
     Rotated grid search for RNN specific hyperparameter search 
     
     Shoutout to Kaare for motivating us during the hyperparameter search lecture to create this :D
@@ -54,7 +54,7 @@ def return_rotated_combinations(ranges, m=6, theta_deg=20, integer_keys=[]) -> l
     dims = len(keys)  # the number of dimensions
 
     # first create a grid with the given dimensions, spanning 0-1 with m equal jumps in this range
-    # the center will be 0.5, and we use this to later scale them to give the required rotated grid points
+    # the center will be 0.5, and we use this to rotate the grid around the center, instead of (0,0).
     axis_points = [np.linspace(0, 1, m) for _ in range(dims)]  
     base_grid = np.array(list(itertools.product(*axis_points)))
 
