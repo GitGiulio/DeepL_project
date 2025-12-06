@@ -68,7 +68,7 @@ NEW_LIST_OF_PLAYERS_MANUAL = ['ArasanX', 'MassterofMayhem', 'JelenaZ', 'lestri',
 'smurf42','IDISJUDA','Lightlike','Enialios','miki_train','Nguyen, Duc Hoa','FlaggingIsADisease','MrSOK','wuzhaobing',
 'Barry_Lindon','cutemouse83','Rumple_DarkOne','ElexusChess','Herushkanamura','Yarebore',"Carlsen, Magnus","Nakamura, Hikaru"]
 
-# --- DATA PREPARATION ---
+# Setting up the split ratios for train val and test
 TRAIN_SPLIT = 0.8
 VALIDATION_SPLIT = 0.1
 TEST_SPLIT = 0.1
@@ -76,11 +76,9 @@ TEST_SPLIT = 0.1
 # How long should games be when passed to the RNN
 GAME_LENGTH = 100
 
-# --- ENSURE STRINGS ---
 data["white_name"] = data["white_name"].astype(str)
 data["black_name"] = data["black_name"].astype(str)
 
-# --- PLAYER MATCH FUNCTION ---
 def player_match(name: str):
     lowered = name.lower()
     for player in NEW_LIST_OF_PLAYERS_MANUAL:
@@ -88,7 +86,6 @@ def player_match(name: str):
             return player
     return None
 
-# --- CREATE WHITE AND BLACK LABELS ---
 data["WhiteLabel"] = data["white_name"].apply(player_match)
 data["BlackLabel"] = data["black_name"].apply(player_match)
 
@@ -96,14 +93,15 @@ data["BlackLabel"] = data["black_name"].apply(player_match)
 mask = data["WhiteLabel"].notna() | data["BlackLabel"].notna()
 data = data[mask].reset_index(drop=True)
 
-# --- MAP PLAYERS TO INTEGER LABELS ---
+# Converting player names to integers
 encodep = dict(zip(NEW_LIST_OF_PLAYERS_MANUAL, range(len(NEW_LIST_OF_PLAYERS_MANUAL))))
 decodep = {v: k for k, v in encodep.items()}
 
 data["WhiteLabelID"] = data["WhiteLabel"].map(encodep)
 data["BlackLabelID"] = data["BlackLabel"].map(encodep)
 
-# --- TOKENIZATION ---
+
+# Tokenization of all moves across the dataset
 cleaner = str.maketrans({"[": "", "]": "", "'": "", ",": ""})
 
 # We tokenize with all available data, because then we are pretty sure all possible moves are tokenized.
@@ -114,7 +112,7 @@ side_tokens = {"white": 0, "black": 1}
 dir.update(side_tokens)
 dir.update({move: len(dir) + i for i, move in enumerate(frequency)})
 
-# --- STEP ENCODING ---
+# Actual encoding of a game using the tokenization, and adding which player to predict (white or black)
 def step_encode(step, side_token=None):
     cleaned = step.translate(cleaner)
     tokening = cleaned.split()[:GAME_LENGTH]  # truncate only
@@ -124,7 +122,7 @@ def step_encode(step, side_token=None):
     # do NOT pad here
     return vector
 
-# --- DATASET ---
+# Setting up the dataset
 class GameSequence(Dataset):
     def __init__(self, samples):
         self.samples = samples
@@ -170,7 +168,7 @@ for player in NEW_LIST_OF_PLAYERS_MANUAL:
 # Returns the dataset containing all the tokenized games.
 gs_data = GameSequence(all_samples)
 
-# --- Basic stats ---
+# Checking that it is working as intended, by printing some samples
 total_samples = len(gs_data)
 num_white = sum(1 for s in gs_data.samples if s[1] == 0)
 num_black = sum(1 for s in gs_data.samples if s[1] == 1)
@@ -180,14 +178,13 @@ print(f"Total samples (should be <= 2x games): {total_samples}")
 print(f"White samples: {num_white}")
 print(f"Black samples: {num_black}")
 
-# --- Check first few samples ---
 for i in range(min(6, total_samples)):
     moves, side_token, label = gs_data.samples[i]
     side_name = "White" if side_token == 0 else "Black"
     label_name = decodep[label]
     print(f"Sample {i}: side={side_name}, label={label_name}, first 10 tokens={step_encode(moves, side_token=side_token)[:10]}")
     
-# --- COLLATE FUNCTION (dynamic padding per batch) ---
+# Dynamic padding per batch using a collate function
 '''
 @author Peter Normann Diekema
 '''
@@ -200,6 +197,7 @@ def collate_fn(batch):
 
 labels = [s[2] for s in gs_data.samples]  # s[2] is the label in (moves, side_token, label)
 
+# Splitting the data into train, val and test using stratify on the labels
 train_indices, val_test_indices = train_test_split(
     range(len(gs_data)),
     test_size=VALIDATION_SPLIT + TEST_SPLIT,
@@ -223,8 +221,6 @@ mlflow.set_experiment("RNN_Grid_Search")
 
 
 # How the initial grid search was run:
-
-# --- INITIAL GRID SEARCH ---
 
 # This leads to 3*2*3*2*3*2 = 216 combinations, which was separated into 3 workers
 initial_grid_search_parameters = {
@@ -265,7 +261,7 @@ for i, comb in enumerate(return_combinations(initial_grid_search_parameters)):
         workerID='A'
     )
 
-# --- ROTATED GRID SEARCH ---
+# Rotated grid search
 hyper_ranges = {
     'batch_size': (64, 256),
     'hidden_layer_dim': (40, 160),
