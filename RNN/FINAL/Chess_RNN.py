@@ -4,7 +4,7 @@ import torch
 '''
 @author Nikan Mahdavi Tabatabaei, Mathijs Tobé
 
-The initial RNN is created by Nikan, but mainly improved to perform well with 4 players. 
+The initial RNN is created by Nikan, and then improved to slightly deeper network and to work on the 370000 games for 20 players by him. 
 Afterwards, the RNN is mostly changed to adapt better to bigger datasets, with extra regularization measures and attention.
 A short description of the initial RNN is given in the report.
 
