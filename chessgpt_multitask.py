@@ -4,7 +4,6 @@ from transformers import AutoTokenizer, AutoModel
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
-from torch.optim import AdamW
 from torch import nn
 import numpy as np
 from torch.amp import autocast, GradScaler
@@ -14,7 +13,7 @@ from sklearn.metrics import f1_score,balanced_accuracy_score
 import mlflow
 
 mlflow.set_tracking_uri(
-        "http://IP_I_WILL_NOT_LEAK:5000"  # We used mlflow to track the training, it was expecially crucial for the hyperparam search we did on the RNN model
+        "http://ip.addres.Mathijs.Tobé:5000"
     )
 mlflow.set_experiment("Transformer")
 
@@ -24,16 +23,18 @@ MIN_TRANSFORMERS_VERSION = '4.25.1'
 # check transformers version
 assert transformers.__version__ >= MIN_TRANSFORMERS_VERSION, f'Please upgrade transformers to version {MIN_TRANSFORMERS_VERSION} or higher.'
 
-LIST_OF_PLAYERS = ['ArasanX', 'MassterofMayhem',  # This is the list of players we used in the end
-                   'JelenaZ', 'lestri',           # even tho they are not all super recognizable names
-                   'doreality', 'therealYardbird',  # these are real extremely good players that were chosen because
-                   'Chesssknock', 'No_signs_of_V',  # they have the most games in our pool
-                   'Recobachess', 'drawingchest',
-                   'kasparik_garik', 'ChainsOfFantasia',
-                   'Consent_to_treatment', 'Alexandr_KhleBovich',
-                   'unknown-maestro_2450', 'gefuehlter_FM',
-                   'gmmitkov', 'positionaloldman',
-                   "Carlsen, Magnus", "Nakamura, Hikaru"]
+LIST_OF_PLAYERS = ['ArasanX', 'MassterofMayhem', 'JelenaZ', 'lestri', 'doreality', 'therealYardbird', 'Chesssknock',
+'No_signs_of_V', 'Recobachess', 'drawingchest', 'kasparik_garik', 'ChainsOfFantasia','Consent_to_treatment',
+'Alexandr_KhleBovich', 'unknown-maestro_2450', 'gefuehlter_FM', 'gmmitkov', 'positionaloldman','Consent_to_treatment',
+'Gyalog75','chargemax23','Boreminator','sotirakis','cn_ua','anhao','manuel-abarca','Chess_diviner',
+'Toro123','Odirovski','manneredmonkey','Viktor_Solovyov','Stas-2444','Zhigalko, Sergei','AKS-Mantissa',
+'vistagausta','Romsta','Aborigen100500','JoeAssaad','bodoque50','doreality1991','Niper13','Violet_Pride','Ivanoblitz','Atalik, Suat',
+'iakov98','AlexD64','satlan','Bakayoyo','athena-pallada','Pblu35','okriak','morus22','Corre_por_tu_vida','Attila76',
+'Karlos_ulsk','www68','Podrebo','papasi','crackcubano','Chessibague','Konstrictor','EleKtRoMaGnIt','snayperchess','ZhohoFF',
+'dont_blunder','Ute-Manfred','Konkurs_prognozov','Mischuk_D','kenkons','notkevich','Elda64','Konnov, Oleg','DrawDenied_Twitch',
+'Vnebo','Leviathan64','VonSinnen','SpiderMoves','econpower','Napo18','KQRBNPkqrbnp','kirlianitalian','DOCTAL','bingo95',
+'smurf42','IDISJUDA','Lightlike','Enialios','miki_train','Nguyen, Duc Hoa','FlaggingIsADisease','MrSOK','wuzhaobing',
+'Barry_Lindon','cutemouse83','Rumple_DarkOne','ElexusChess','Herushkanamura','Yarebore',"Carlsen, Magnus","Nakamura, Hikaru"]
 
 csv_path = r"/filtered_games_new.csv"
 batch_size = 128
@@ -41,7 +42,17 @@ df = pd.read_csv(csv_path)
 
 def stratified_random_subset(df, label_col, per_class, seed=77):
     """
+    @author Giulio Lo Cigno
     This function is used to take for each class the same number of games
+
+    Args:
+        df (pd.DataFrame): the dataframe containing the games
+        label_col (str): the column name of the label
+        per_class (int): the number of games per class we want to keep
+        seed (int): the random seed, to be able to reproduce results
+
+    Returns:
+        pd.DataFrame: the dataframe containing only per_class games for each class
     """
     subset_rows = []
     for cls, group in df.groupby(label_col):
@@ -88,6 +99,9 @@ df_white_black['black_elo'].fillna(df_white_black['black_elo'].mean(), inplace=T
 
 elos = np.vstack([df_white_black['white_elo'].to_numpy(), df_white_black['black_elo'].to_numpy()]).T.astype(np.float32)
 
+# here I strap together all the informations that I want the model to use,
+# and I represent with 1 if we are interested in the white player and with 2 for the black player
+
 df_white['transformer_input'] = (
             "1 " + df_white['game_type'] + " " + df_white['time_control'] + " " + df_white['moves'])
 
@@ -128,8 +142,9 @@ print(f"|-|-|-|-|-|std_elo: {std_elo}|-|-|-|-|")
 
 class ChessDataset_transformer(Dataset):
     """
-    This is a custom dataset that enables the feeding of chess games as input for our transformer-based model
-    It tokenize the input text and transform both classification labels and elo-regression labels in torch.tensors
+    @author Giulio Lo Cigno
+    This is a custom dataset that enables the feeding of chess games as input and class and regression lables for our transformer-based model
+    It tokenizes the input text and transform both classification labels and elo-regression labels in torch.tensors
     """
 
     def __init__(self, texts, labels, elos, tokenizer, max_length=512):
@@ -166,10 +181,12 @@ class ChessDataset_transformer(Dataset):
 
 def unfreeze_last_layers(model):
     """
-    This function unfreezes the last layer of the transformer,
-    this is because slightly changing the representation of the last layer
-     after a few epochs of training can be very beneficial for the accuracy.
-    This is due to the fact that the representation in the last layer is the most task-specific.
+    @author Giulio Lo Cigno
+
+    This function unfreezes the last tree layers of the transformer,
+    this is because slightly changing the representation of the last layers can be very beneficial for the accuracy.
+    This is due to the fact that the representation in the last layers is the most task-specific,
+    and in our case the task is quite different to what the original transformer was trained for.
     """
     third_last = model.base_model.layers[-3]
     for p in third_last.parameters():
@@ -186,7 +203,7 @@ def unfreeze_last_layers(model):
     for p in model.base_model.final_layer_norm.parameters():
         p.requires_grad = True
 
-    print(f"Unfroze last transformer layer.")
+    print(f"Unfroze last transformer layers.")
 
 model_name = "/model/snapshots/e498922d792f3fd7c07471a498ad0a79e0f0b0a0"  # now I am using a local version of the model
 tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
@@ -198,6 +215,11 @@ chessgpt.config.pad_token_id = tokenizer.eos_token_id
 
 
 def masked_mean_pooling(last_hidden_state, attention_mask):
+    """
+    @author Giulio Lo Cigno
+    With this function I calculate the mean pooling over the last layer of the transformer model.
+    I do this considering the attention_mask, to not account for the padding part.
+    """
     mask = attention_mask.unsqueeze(-1).type_as(last_hidden_state)
     summed = (last_hidden_state * mask).sum(dim=1)
     denom = mask.sum(dim=1).clamp_min(1e-6)
@@ -206,8 +228,9 @@ def masked_mean_pooling(last_hidden_state, attention_mask):
 
 class SharedTwoLayerMLP(nn.Module):
     """
-    This is the first part of the multitask MLP that we added to the pretrained-transformer, and is shared between both tasks
-    It consists of 2 fully connected layers, each followed by GELU activation function
+    @author Giulio Lo Cigno
+    This is the first part of the multitask MLP that I added to the pretrained-transformer, and is shared between both tasks
+    It consists of 2 fully connected layers, each followed by GELU activation function and then a dropout layer for regularization.
     """
 
     def __init__(self, in_dim, shared_dim1, shared_dim2, dropout):
@@ -225,9 +248,10 @@ class SharedTwoLayerMLP(nn.Module):
 
 class ClassificationHead(nn.Module):
     """
+    @author Giulio Lo Cigno
     This is the Classification specific end of the network,
-    it consists of 1 fully connected layer, followed by a GELU activation function,
-    then another fully connected layer that ends in N neurons (where N is the number of classes)
+    it consists of 1 fully connected layer, followed by a GELU activation function and a dropout layer for regularization.
+    Then another fully connected layer that ends in N neurons (where N is the number of classes)
     """
 
     def __init__(self, in_dim, num_classes, head_dim, dropout):
@@ -245,9 +269,10 @@ class ClassificationHead(nn.Module):
 
 class RegressionHead(nn.Module):
     """
+    @author Giulio Lo Cigno
     This is the Regression specific end of the network,
-    it consists of 1 fully connected layer, followed by a GELU activation function,
-    then another fully connected layer that ends in 2 neurons since we need to predict 2 ELO values
+    it consists of 1 fully connected layer, followed by a GELU activation function and a dropout layer for regularization.
+    Then another fully connected layer that ends in 2 neurons since we need to predict 2 ELO values
     """
 
     def __init__(self, in_dim, out_dim, head_dim, dropout):
@@ -265,6 +290,7 @@ class RegressionHead(nn.Module):
 
 class MultiTaskTransformer(nn.Module):
     """
+    @author Giulio Lo Cigno
     In this class we put all the previous parts together, after the pretrained transformer
     """
 
@@ -317,32 +343,32 @@ class MultiTaskTransformer(nn.Module):
 
 
 """ 
-This is the actual initialization of the model, we specify 21 classes, since we have 20 players that the network must classify.
+This is the actual initialization of the model, we specify 100 classes, since we have 100 players that the network must classify.
 Then we have 2 regression values, because the model should also predict the elo of both players (white and black)
 """
 model = MultiTaskTransformer(
     base_model=chessgpt,
-    num_classes=20,
+    num_classes=100,
     num_regression=2,
-    shared_dim1=1024,    # 1024 is better than 512, I will not go higher due to the fact that slows down training if it even fits in VRAM
-    shared_dim2=512,    # 512 same as above, better than 256
-    head_dim=256,       # 256 same as above, better than 128
-    dropout=0.0         # 0.1 is the other option that I tested, but gives worst performances
+    shared_dim1=768,    # values tried: 1024 | 768 | 512
+    shared_dim2=384,    # values tried: 512 | 384 | 256
+    head_dim=256,       # values tried: 256 | 128
+    dropout=0.1         # values tried: 0.0 | 0.1
 )
 
-print(f"HYPERPARAM: \n shared_dim1=1024, \n shared_dim2=512, \n head_dim=256, \n dropout=0.0")
+print(f"HYPERPARAM: \n shared_dim1=768, \n shared_dim2=384, \n head_dim=256, \n dropout=0.1")
 
 for p in model.base_model.parameters():
     p.requires_grad = False
 
-train_dataset = ChessDataset_transformer(X_train, y_train, elos_train, tokenizer, max_length=256)
+train_dataset = ChessDataset_transformer(X_train, y_train, elos_train, tokenizer, max_length=256)  # values tried: 256 | 128 | 512 <- does not fit in VRAM
 val_dataset = ChessDataset_transformer(X_val, y_val, elos_val, tokenizer, max_length=256)
 test_dataset = ChessDataset_transformer(X_test, y_test, elos_test, tokenizer, max_length=256)
 
-print(f"HYPERPARAM: tokenizer, max_length=256") # 256 makes training a bit slower but seem sightly better that 128. More than 256 don't fit in VRAM.
+print(f"HYPERPARAM: tokenizer, max_length=256")  # 256 makes training a bit slower but seem sightly better than 128.
 
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)  # batch size was set to the biggest I could to speed up training
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)     # with those settings 1epoch with 100 players dataset took 4.5h on lumi
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 print(len(train_loader))
@@ -361,13 +387,16 @@ for name, p in model.named_parameters():
             backbone_params.append(p)
 
 optimizer = torch.optim.AdamW([
-    {"params": head_params, "lr": 5e-4},  # heads: faster LR
-    {"params": backbone_params, "lr": 1e-4},  # unfrozen GPT-NeoX blocks: smaller LR
+    {"params": head_params, "lr": 4e-4,"weight_decay": 0.02},  # heads: faster LR
+    {"params": backbone_params, "lr": 8e-5,"weight_decay": 0.007},  # unfrozen Transformer blocks: smaller LR
 ])
 print(f"HYPERPARAM: lrs: 5e-4  &  1e-4")
-print(f"HYPERPARAM: weight_decays: 0.0")  # I decided that 0.0 is the best option in this case (I tested a few values)
+print(f"HYPERPARAM: weight_decays: 0.02 &  0.007")
 
-scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=25, num_training_steps=700)  # those steps have been calculated based on the number of data, batch size, accumulator size and n. epochs
+# I use a scheduler to slowly decrease the lerning rates, and also slowly ramp up at the start to make the inintial training more stable, when momentum has not much informations yet.
+# the number of steps are calculated by me, num_warmup_steps is around 8% of total steps (number of scheduler.step())
+# while num_training_steps is intentionally 1000 more that that, because I didn't want the learning rate to became to small
+scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=150, num_training_steps=2950)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -386,6 +415,31 @@ def train_validate(train_loader: DataLoader,
                    device: torch.device,
                    alpha=0.2,
                    accumulation_step=32):
+    """
+    @author Mathijs Tobé & Giulio Lo Cigno
+
+    This function is called each epoch and contains the training loop, followed by the validation loop.
+    Mathijs Tobé created the function with the general loops, and the tracking of all data needed for the metrics calculation.
+    Giulio Lo Cigno modified it to use it specifically with the Transformer-based model, adding the batch accumulation, the autocast to save VRAM and the scheduler.
+
+    Args:
+        train_loader (DataLoader): the training data loader
+        validation_loader (DataLoader): the validation data loader
+        model (nn.Module): the model
+        optimizer (Optimizer): the optimizer
+        scheduler (Scheduler): the scheduler
+        device (torch.device): the device
+        alpha (float, optional): hyperparameter defining regression loss weight
+        accumulation_step (int, optional): the number of steps to accumulate gradient over, with 128batch size and 32 accumulation_step our batch is effectively of 4096
+
+    Returns:
+          float: avg_train_loss
+          float: avg_val_loss
+          tuple[np.array,np.array]: (pred_labels_train, true_labels_train)
+          tuple[np.array,np.array]: (pred_labels_val, true_labels_val)
+          tuple[np.array,np.array]: (pred_regression_train, true_regression_train)
+          tuple[np.array,np.array]: (pred_regression_val, true_regression_val)
+    """
     scaler = GradScaler()
 
     batch_losses_train = []  # each batch, the loss is stored and later averaged to get an average train loss per epoch
@@ -522,6 +576,24 @@ def test(test_loader: DataLoader,
          model: nn.Module,
          device: torch.device,
          alpha=0.2):
+    """
+        @author Mathijs Tobé & Giulio Lo Cigno
+
+        This function is called after all epochs and implements the testing logic.
+        Mathijs Tobé created the function with the general logic, and the tracking of all data needed for the metrics calculation.
+        Giulio Lo Cigno modified it to use it specifically with the Transformer-based model.
+
+        Args:
+            test_loader (DataLoader): the test data loader
+            model (nn.Module): the model
+            device (torch.device): the device
+            alpha (float, optional): hyperparameter defining regression loss weight
+
+        Returns:
+              float: avg_test_loss
+              tuple[np.array,np.array]: (pred_labels_test, true_labels_test)
+              tuple[np.array,np.array]: (pred_regression_test, true_regression_test)
+    """
     model.eval()
 
     batch_losses_test = []
@@ -570,6 +642,20 @@ def test(test_loader: DataLoader,
     return avg_test_loss, (pred_labels_test, true_labels_test), (pred_regression_test, true_regression_test)
 
 def calculateMetrics(avg_loss: np.floating, predicted_labels: np.ndarray, true_labels: np.ndarray):
+    """
+    @author Mathijs Tobé
+    Function that calculates the most important metrics on the fly, to log them using MLflow
+
+    Args:
+        avg_loss (float): the average loss of the model
+        predicted_labels (np.array): the predicted labels
+        true_labels (np.array): the true labels
+
+    Returns:
+        float: macro_f1
+        float: weighted_f1
+        float: bal_accuracy
+    """
     # --- CLASSIFICATION ---
     '''
     Macro F1 = The average f1 score over all classes, treating each class equally.
@@ -595,6 +681,7 @@ def calculateMetrics(avg_loss: np.floating, predicted_labels: np.ndarray, true_l
 
 def to_serializable(obj):
     """
+    @author Giulio Lo Cigno
     Recursively convert NumPy arrays / Tensors inside lists/dicts to JSON-serializable types.
     Now this function seem very overkill, this is because I changed the way I save the data after implementing it.
     """
@@ -637,15 +724,22 @@ metrics_dict = {
     "pred_regression_val": [],
     "true_regression_val": [],
 }
-with mlflow.start_run(run_name='Optimus_Prime'):
-    mlflow.log_param('batch_size', 256)
-    mlflow.log_param('MLP_shared_dim1', 1024)
-    mlflow.log_param('MLP_shared_dim2', 512)
+with mlflow.start_run(run_name='Megatron'):
+    mlflow.log_param('batch_size', 128)
+    mlflow.log_param('batch_accumulation', 32)
+    mlflow.log_param('MLP_shared_dim1', 768)
+    mlflow.log_param('MLP_shared_dim2', 384)
     mlflow.log_param('MLP_head_dim', 256)
-    mlflow.log_param('dropout', 0.0)
+    mlflow.log_param('dropout', 0.1)
     mlflow.log_param('learning_rate_MLP_head', 5e-4)
     mlflow.log_param('learning_rate_transformer_last_2_layers', 1e-4)
-    for epoch in range(20):
+    mlflow.log_param('weight_decay_MLP_head', 0.04)
+    mlflow.log_param('weight_decay_transformer_last_2_layers', 0.009)
+    mlflow.log_param('max_lenght', 256)
+    mlflow.log_param('scheduler_wu_steps', 150)
+    mlflow.log_param('scheduler_tot_steps', 2950)
+    mlflow.log_param('alpha', 0.2)
+    for epoch in range(10):
         avg_train_loss, avg_val_loss, \
             (pred_labels_train, true_labels_train), \
             (pred_labels_val, true_labels_val), \
@@ -680,6 +774,7 @@ with mlflow.start_run(run_name='Optimus_Prime'):
         "true_regression_val": true_regression_val,
         }
 
+        # I save all the metrics of each epoch in a json file, in this way I can calculate new metrics on old runs in a second moment
         with open(f"/metrics/metrics_epoch_{epoch}.json", "w") as f:
             json.dump(to_serializable(metrics_dict), f, indent=2)
 
@@ -688,25 +783,25 @@ with mlflow.start_run(run_name='Optimus_Prime'):
 
         if best_val_loss > avg_val_loss:
             epochs_non_improved = 0
-            best_loss = avg_val_loss
-            torch.save(model.state_dict(), "/best_models/best_model_final.pth")
+            best_val_loss = avg_val_loss
+            torch.save(model.state_dict(), "/best_models/Megatron.pth")
         else:
             epochs_non_improved += 1
-            if epochs_non_improved == 2:
+            if epochs_non_improved == 4:
                 print(f"EARLY STOPPING TRAINING")
                 break
 
-    model.load_state_dict(torch.load(r"/best_models/best_model_final.pth"))  # I load the model that performed better on validation
+    model.load_state_dict(torch.load(r"/best_models/Megatron.pth"))  # I load the model that performed better on validation
 
     avg_test_loss, (pred_labels_test, true_labels_test), (pred_regression_test, true_regression_test) = test(test_loader,model,device)  # I test only the best model
 
     print(f"Test metrics:")
     t_macro_f1, t_weighted_f1, t_balanced_acc = calculateMetrics(avg_val_loss, pred_labels_val, true_labels_val)
 
-    mlflow.log_metric('test/loss', avg_test_loss, step=epoch)
-    mlflow.log_metric('test/macro_f1', t_macro_f1, step=epoch)
-    mlflow.log_metric('test/weighted_f1', t_weighted_f1, step=epoch)
-    mlflow.log_metric('test/balanced_acc', t_balanced_acc, step=epoch)
+    mlflow.log_metric('test/loss', avg_test_loss)
+    mlflow.log_metric('test/macro_f1', t_macro_f1)
+    mlflow.log_metric('test/weighted_f1', t_weighted_f1)
+    mlflow.log_metric('test/balanced_acc', t_balanced_acc)
 
     test_metrics_dict = {
         "avg_test_loss": avg_test_loss,
@@ -716,6 +811,6 @@ with mlflow.start_run(run_name='Optimus_Prime'):
         "true_regression_test": true_regression_test,
     }
 
-
+    # and here I save also the test metrics in a json
     with open(r"/metrics/test_metrics.json", "w") as f:
         json.dump(to_serializable(test_metrics_dict), f, indent=2)

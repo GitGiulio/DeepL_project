@@ -8,8 +8,9 @@ outfile_path = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\all
 
 def moves_manipulation(pgn_string):
     """
-    This function uses regular expressions to count the number of moves an at the same time create a list of all the moves, in order
-    To create the regex expressions I used Microsoft Copilot, since it's a tedious job that is easy to mess up
+    @author Giulio Lo Cigno & Microsoft Copilot
+    This function uses regular expressions to count the number of moves an at the same time create a list of all the moves,
+     in order to create the regex expressions I used Microsoft Copilot, since it's a tedious job that is easy to mess up
 
     Returns:
         tuple (int, list): num_moves, list_of_moves
@@ -43,6 +44,11 @@ def moves_manipulation(pgn_string):
     return num_moves, list_of_moves
 
 def find_a_metadata(lines,index,metadata_str):
+    """
+    @author Giulio Lo Cigno
+    This function searches through the next lines in case I don't find the metadata in the pace I was expecting it to be
+     this is needed because some metadata are optional, and when they are present the ones after gets shifted.
+    """
     for i in range(30):
         if len(lines) <= index+i:
             return "NOT_FOUND"
@@ -53,6 +59,17 @@ def find_a_metadata(lines,index,metadata_str):
     return "NOT_FOUND"
 
 def filter_file_concurrent(filepath,file_number):
+    """
+    @author Giulio Lo Cigno
+    This function takes a filepath (of a PGN file) and a file number, extract from it all informations needed for us,
+     creates a list of rows, then either at the end of the file or every 1M games transforms the list of rows in a pd.Dataframe, and saves it in a csv file.
+     this process is needed because keeping all the data in a single file is unfeasible since it won't fit in my 32GB of RAM.
+     The data will be united at the end, after filtering only the games of the players that we want to consider.
+
+     Args:
+         filepath (string): the filepath of the PGN file
+         file_number (int): the file number of the PGN file, this is needed to give different names to the created csv files in an incremental way
+    """
     saved = False
     game_number = 0
     chunk_number = 0
@@ -161,105 +178,6 @@ def filter_file_concurrent(filepath,file_number):
     return True
     #return dataframe
 
-def filter_list_of_files(filepaths):
-    """
-    Col 1: game_number,
-    Col 2: game_type (OTB/online),
-    Col 3: white_name,
-    Col 4: black_name,
-    Col 5: white_elo,
-    Col 6: black_elo,
-    Col 7: time_control,
-    Col 8: moves,
-    Col 9: number_of_moves,
-    Col 10: list_of_moves,
-    """
-    game_number = 0
-    dataframe = pd.DataFrame(columns=['game_number', 'game_type', 'white_name', 'black_name',
-                                      'white_elo', 'black_elo', 'time_control', 'moves',
-                                      'number_of_moves', 'list_of_moves', 'game_result'])
-
-    for file_number,filepath in enumerate(filepaths):
-        print("Processing", filepath)
-        with open(filepath, 'r', encoding="utf-8") as infile:
-            lines = infile.readlines()
-        if "OTB" in filepath:
-            game_type = "OTB"
-        elif "Online" in filepath:
-            game_type = "ONLINE"
-        else:
-            raise Exception(f"Invalid game type for {filepath}")
-
-        for index,line in enumerate(lines):
-
-            if "[White " in line:
-                game_number += 1
-                if game_number%10000 == 0:
-                    print(f"{game_number} games processed, file {file_number}")
-                white_name = lines[index][len("[White \""):-3]
-                if "[WhiteElo " in lines[index+3]:
-                    white_elo = int(lines[index+3][len("[WhiteElo \""):-3])
-                else:
-                    white_elo = find_a_metadata(lines,index+2,"[WhiteElo \"")
-                if "[Black " in lines[index+1]:
-                    black_name = lines[index+1][len("[Black \""):-3]
-                else:
-                    black_name = find_a_metadata(lines, index, "[Black \"")
-                if "[BlackElo " in lines[index+4]:
-                    black_elo = lines[index+4][len("[BlackElo \""):-3]
-                else:
-                    black_elo = find_a_metadata(lines, index+3, "[BlackElo \"")
-                if "[Result " in lines[index+2]:
-                    game_result = lines[index+2][len("[Result \""):-3]
-                else:
-                    game_result = find_a_metadata(lines, index+1, "[Result \"")
-                time_control = find_a_metadata(lines, index, "[Result \"")
-
-                not_next_game = True
-                start_moves = False
-                this_line_index = index + 5
-                next_line = lines[this_line_index]
-                moves = ""
-                while not_next_game:
-                    if "[White " in next_line:
-                        not_next_game = False
-                    else:
-                        if not start_moves:
-                            if "\n" == next_line:
-                                start_moves = True
-                        else:
-                            if "\n" != next_line:
-                                moves = moves + next_line
-                            else:
-                                not_next_game = False
-                                continue
-                        this_line_index += 1
-                        next_line = lines[this_line_index]
-
-                number_of_moves, list_of_moves = moves_manipulation(moves)
-
-                new_row = {
-                    "game_number": f"{file_number}_{game_number}",
-                    "game_type": game_type,
-                    "white_name": white_name,
-                    "white_elo": white_elo,
-                    "black_name": black_name,
-                    "black_elo": black_elo,
-                    "game_result": game_result,
-                    "time_control": time_control,
-                    "moves": moves,
-                    "number_of_moves": number_of_moves,
-                    "list_of_moves": list_of_moves
-                }
-                dataframe = pd.concat([dataframe, pd.DataFrame([new_row])], ignore_index=True)
-
-            else:
-                continue
-        dataframe.to_csv(f"C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\file_{file_number}.csv", index=False)
-
-    return dataframe
-
-
 path_online_95_09 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_1995_2009.pgn"
 path_online_10_14 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_2010_2014.pgn"
 path_online_15_19 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_2015_2019.pgn"
@@ -281,18 +199,10 @@ allfilepaths = [path_online_95_09, path_online_10_14,path_online_15_19, path_onl
                 path_online_2023, path_online_2024,path_online_2025,path_otb_90_99,path_otb_00_04,path_otb_05_09,
                 path_otb_10_14,path_otb_15_19,path_otb_20_24,path_otb_2025]
 
-filter_file_concurrent(allfilepaths[15],15)
-print("DONE")
-#from concurrent.futures import ThreadPoolExecutor
-#
-#with ThreadPoolExecutor(max_workers=8) as executor:
-#    results = [executor.submit(filter_file_concurrent, file,file_number) for file,file_number in zip(filepaths6,file_nums6)]
-#
-#for r in results:
-#    if not r:
-#        print("ERROR")
-#    else:
-#        print(r)
-#final_df = pd.concat(dataframes, ignore_index=True)
+from concurrent.futures import ThreadPoolExecutor
 
-#final_df.to_csv("C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\all_games.csv", index=False)
+with ThreadPoolExecutor(max_workers=2) as executor:
+    for i,filepath in enumerate(allfilepaths):
+        filter_file_concurrent(filepath,i)
+
+print("DONE")

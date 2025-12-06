@@ -401,11 +401,11 @@ def calculateMetrics(avg_loss : np.ndarray, predicted_labels : np.ndarray, true_
     plt.savefig(f"../data/plots_chessGPT/{directory}/regression_{set}_{epoch}.png")
     plt.close()
 
-directory = 'Optimus_Prime'
-mean_elo = 2663.914794921875
-std_elo = 111.10905456542969
+directory = 'Megatron'
+mean_elo = 2654.766845703125  # 20 players: 2663.914794921875 | 100 players: 2654.766845703125
+std_elo = 108.93199920654297  # 20 players: 111.10905456542969 | 100 players: 108.93199920654297
 
-for i in range(20):
+for i in range(4,9):
     with open(f"../data/run_metrics_chessGPT/{directory}/metrics_epoch_{i}.json", "r") as f:
         data = json.load(f)
 
