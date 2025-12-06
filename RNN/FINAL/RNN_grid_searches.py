@@ -246,7 +246,7 @@ def run_grid_point(
         # read more about this choice in the report.
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, mode='min', factor=SCHEDULER_FACTOR, patience=2, threshold=0.001)
             
-        # --- TRAINING, VALIDATION ---
+        # Training and validation
         print(f"Beginning training... using {device} device")
         for iEpoch in range(EPOCHS):
             t_loss, v_loss, (pltrain, tltrain), (plval, tlval)\
@@ -309,7 +309,7 @@ def run_grid_point(
         # can easily be reproduced, so this is commented out.
         # torch.save(model.state_dict(), f"/best_models/RNN_best_model_run{id:04d}_{workerID}.pth")
 
-        # --- TESTING ---
+        # Testing
         avg_test_loss, (pred_labels_test, true_labels_test) = test(test_loader=TEST_DATALOADER,
                             model=model,
                             device=device)
