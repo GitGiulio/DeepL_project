@@ -32,12 +32,15 @@ def calculate_metrics_for_plots(avg_loss: np.ndarray, predicted_labels: np.ndarr
 
 def add_a_model_to_plt(plt,directory,color,n_epochs):
     bal_accuracy_array = []
+    average_train_accuracy = []
+    average_val_accuracy = []
     epochs = []
     for epoch in range(n_epochs):
         with open(f"../run_metrics_chessGPT/{directory}/metrics_epoch_{epoch}.json", "r") as f:
             data = json.load(f)
 
         avg_val_loss = data["avg_val_loss"]
+        avg_train_loss = data["avg_train_loss"]
         pred_labels_val = np.array(data["pred_labels_val"])
         true_labels_val = np.array(data["true_labels_val"])
 
@@ -50,8 +53,10 @@ def add_a_model_to_plt(plt,directory,color,n_epochs):
                 per_class_f1_array.append([])
             per_class_f1_array[i].append(per_class_f1)
         bal_accuracy_array.append(bal_accuracy)
+        average_val_accuracy.append(avg_val_loss)
+        average_train_accuracy.append(avg_train_loss)
         epochs.append(epoch)
-
+    """
     print(f"----------TEST--METRICS--------")
     if directory != 'Optimus_Prime':
         with open(f"../run_metrics_chessGPT/{directory}/test_metrics.json", "r") as f:
@@ -65,15 +70,17 @@ def add_a_model_to_plt(plt,directory,color,n_epochs):
                                                                                         true_labels_test)
         bal_accuracy_array.append(bal_accuracy)
         epochs.append(n_epochs)
+    """
+    plt.plot(epochs, average_val_accuracy, color=color, label=f"val loss {directory}")
+    plt.plot(epochs, average_train_accuracy, color=color,linestyle='-.', label=f"train loss {directory}")
 
-    plt.plot(epochs, bal_accuracy_array, color=color, label=directory)
 
 
 directories = ['Megatron','Bumblebee','Optimus_Prime']
 colors = ['red','orange','blue']
-#epochs = [9,20,20]
+epochs = [6,7,7]
 
-directory = 'Bumblebee'
+#directory = 'Bumblebee'
 mean_elo = 2654.766845703125  # 20 players: 2663.914794921875 | 100 players: 2654.766845703125
 std_elo = 108.93199920654297  # 20 players: 111.10905456542969 | 100 players: 108.93199920654297
 
@@ -81,17 +88,18 @@ macro_f1_array = []
 weighted_f1_array = []
 per_class_f1_array = []
 bal_accuracy_array = []
-epochs = []
+#epochs = []
 
 
-"""
+#"""
 plt.figure(figsize=(6, 6))
-plt.title("Accuracy per class over time")
+plt.title("Loss over time comparison")
 for directory,n_epochs,color in zip(directories,epochs,colors):
     print(f"--- {color} ---{directory}---{n_epochs}")
     add_a_model_to_plt(plt,directory,color,n_epochs)
 plt.legend()
-plt.savefig(f"./comparison_plots/accuracy_model_over_time.png")
+#plt.savefig(f"./comparison_plots/accuracy_model_over_time.png")
+plt.savefig(f"./comparison_plots/train_val_loss.png")
 plt.close()
 
 """
@@ -152,3 +160,4 @@ for i,class_f1_array in enumerate(per_class_f1_array):
 plt.title("Accuracy per class over time")
 plt.savefig(f"./comparison_plots/accuracy_x_class_over_time_{directory}.png")
 plt.close()
+"""

@@ -36,7 +36,7 @@ JelenaZ                             24452 unknown_real
 # Where is the data stored that is downloaded from Lumbrasgigabase.com? 
 
 #csvs_dir = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\DATA_PROJECT"
-csvs_dir = r"C:\Users\giuli\PycharmProjects\DeepL_project_test\data\all_games_csvs"
+csvs_dir = r"/data/all_games_csvs"
 #outfile_path = "C:\\Users\\mathi\\Documents\\University\\Aarhus University\\MSc Computer Engineering\\Semester 1\\Deep Learning\\project\\DeepL_project\\filtered_games_nobots.csv"
 
 # Keep these titles if specified.

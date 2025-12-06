@@ -178,22 +178,22 @@ def filter_file_concurrent(filepath,file_number):
     return True
     #return dataframe
 
-path_online_95_09 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_1995_2009.pgn"
-path_online_10_14 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_2010_2014.pgn"
-path_online_15_19 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_2015_2019.pgn"
-path_online_2020 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_2020.pgn"
-path_online_2021 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_2021.pgn"
-path_online_2022 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_2022.pgn"
-path_online_2023 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_2023.pgn"
-path_online_2024 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_2024.pgn"
-path_online_2025 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_Online_2025.pgn"
-path_otb_90_99 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_OTB_1990_1999.pgn"
-path_otb_00_04 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_OTB_2000_2004.pgn"
-path_otb_05_09 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_OTB_2005_2009.pgn"
-path_otb_10_14 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_OTB_2010_2014.pgn"
-path_otb_15_19 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_OTB_2015_2019.pgn"
-path_otb_20_24 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_OTB_2020_2024.pgn"
-path_otb_2025 = "C:\\Users\\giuli\\PycharmProjects\\DeepL_project_test\\data\\original_PGNs\\LumbrasGigaBase_OTB_2025.pgn"
+path_online_95_09 = "/data/original_PGNs/LumbrasGigaBase_Online_1995_2009.pgn"
+path_online_10_14 = "/data/original_PGNs/LumbrasGigaBase_Online_2010_2014.pgn"
+path_online_15_19 = "/data/original_PGNs/LumbrasGigaBase_Online_2015_2019.pgn"
+path_online_2020 = "/data/original_PGNs/LumbrasGigaBase_Online_2020.pgn"
+path_online_2021 = "/data/original_PGNs/LumbrasGigaBase_Online_2021.pgn"
+path_online_2022 = "/data/original_PGNs/LumbrasGigaBase_Online_2022.pgn"
+path_online_2023 = "/data/original_PGNs/LumbrasGigaBase_Online_2023.pgn"
+path_online_2024 = "/data/original_PGNs/LumbrasGigaBase_Online_2024.pgn"
+path_online_2025 = "/data/original_PGNs/LumbrasGigaBase_Online_2025.pgn"
+path_otb_90_99 = "/data/original_PGNs/LumbrasGigaBase_OTB_1990_1999.pgn"
+path_otb_00_04 = "/data/original_PGNs/LumbrasGigaBase_OTB_2000_2004.pgn"
+path_otb_05_09 = "/data/original_PGNs/LumbrasGigaBase_OTB_2005_2009.pgn"
+path_otb_10_14 = "/data/original_PGNs/LumbrasGigaBase_OTB_2010_2014.pgn"
+path_otb_15_19 = "/data/original_PGNs/LumbrasGigaBase_OTB_2015_2019.pgn"
+path_otb_20_24 = "/data/original_PGNs/LumbrasGigaBase_OTB_2020_2024.pgn"
+path_otb_2025 = "/data/original_PGNs/LumbrasGigaBase_OTB_2025.pgn"
 
 allfilepaths = [path_online_95_09, path_online_10_14,path_online_15_19, path_online_2020,path_online_2021, path_online_2022,
                 path_online_2023, path_online_2024,path_online_2025,path_otb_90_99,path_otb_00_04,path_otb_05_09,
