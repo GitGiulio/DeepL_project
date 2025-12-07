@@ -4,11 +4,15 @@ import torch
 '''
 @author Nikan Mahdavi Tabatabaei, Mathijs Tobé
 
-The initial RNN is created by Nikan, and then improved to slightly deeper network and to work on the 370000 games for 20 players by him. 
-Afterwards, the RNN is mostly changed to adapt better to bigger datasets, with extra regularization measures and attention.
+The initial RNN is created by Nikan, and improved by Mathijs. 
+The RNN is mostly changed to adapt better to bigger datasets, with extra regularization measures and attention.
 A short description of the initial RNN is given in the report.
 
-https://www.nature.com/articles/s41598-025-88378-6 - Source for how applying attention to LSTM outputs can give better performance
+Sources used for creating this RNN work for our chess data:
+https://www.nature.com/articles/s41598-025-88378-6
+https://arxiv.org/abs/1607.06450
+https://drlee.io/revolutionizing-time-series-prediction-with-lstm-with-the-attention-mechanism-090833a19af9
+
 '''
 class Chess_RNN(nn.Module):
     # Params should make sense, worth mentioning is the dim_embedded, which controls how big the embedding table should be
