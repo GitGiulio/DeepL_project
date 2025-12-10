@@ -400,6 +400,7 @@ scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=150, n
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
+print(model)
 model.to(device)
 
 #print(f"-------LOADING MODEL--------------")
@@ -468,9 +469,9 @@ def train_validate(train_loader: DataLoader,
         reg_labels = torch.nan_to_num(reg_labels, nan=0.0, posinf=3, neginf=-15)
 
         ce_loss = torch.nn.functional.cross_entropy(class_logits.float(), class_labels)
-        huber_loss = torch.nn.functional.smooth_l1_loss(class_regr.float(), reg_labels.float(), beta=1.0)
+        sl1_loss = torch.nn.functional.smooth_l1_loss(class_regr.float(), reg_labels.float(), beta=1.0)
 
-        loss = ce_loss + alpha * huber_loss
+        loss = ce_loss + alpha * sl1_loss
         loss = loss / accumulation_step
 
         scaler.scale(loss).backward()
@@ -485,7 +486,7 @@ def train_validate(train_loader: DataLoader,
             print(f"class_loss = {ce_loss.item()}")
             print(f"macro_f1 = {f1_score(true_labels_train_f1, pred_labels_train_f1, average='macro')}")
             print(f"weighted_f1 = {f1_score(true_labels_train_f1, pred_labels_train_f1, average='weighted')}")
-            print(f"regression_loss = {huber_loss.item()}")
+            print(f"regression_loss = {sl1_loss.item()}")
             print("-------------------------------------------------")
 
             scaler.step(optimizer)
@@ -545,8 +546,8 @@ def train_validate(train_loader: DataLoader,
             reg_labels = torch.nan_to_num(reg_labels, nan=0.0, posinf=3, neginf=-15)
 
             ce_loss = torch.nn.functional.cross_entropy(class_logits.float(), class_labels)
-            huber_loss = torch.nn.functional.smooth_l1_loss(class_regr.float(), reg_labels.float(), beta=1.0)
-            loss = ce_loss + alpha * huber_loss
+            sl1_loss = torch.nn.functional.smooth_l1_loss(class_regr.float(), reg_labels.float(), beta=1.0)
+            loss = ce_loss + alpha * sl1_loss
 
         print(loss.item())
         batch_losses_val.append(loss.item())
@@ -618,9 +619,9 @@ def test(test_loader: DataLoader,
         reg_labels = torch.nan_to_num(reg_labels, nan=0.0, posinf=3, neginf=-15)
 
         ce_loss = torch.nn.functional.cross_entropy(class_logits.float(), class_labels)
-        huber_loss = torch.nn.functional.smooth_l1_loss(class_regr.float(), reg_labels.float(), beta=1.0)
+        sl1_loss = torch.nn.functional.smooth_l1_loss(class_regr.float(), reg_labels.float(), beta=1.0)
 
-        loss = ce_loss + alpha * huber_loss
+        loss = ce_loss + alpha * sl1_loss
         print(loss.item())
         batch_losses_test.append(loss.item())
 
